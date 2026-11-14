@@ -3,12 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-/** False when .env.local is missing; the layout shows a setup banner instead of crashing. */
+/** False when the shared repository-root .env is missing; the layout shows a setup banner. */
 export const supabaseConfigured = Boolean(url && key);
 
 // ALL queries + RPCs target the mockr schema. Never touch `public` or `mockreddit` from this app.
 export const supabase = createClient<any, 'mockr'>(
-  url || 'http://localhost:54321',
+  url || 'https://unconfigured.supabase.invalid',
   key || 'missing-anon-key',
   { db: { schema: 'mockr' } },
 );

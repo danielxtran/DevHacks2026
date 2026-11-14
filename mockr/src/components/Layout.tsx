@@ -46,7 +46,7 @@ export function Layout() {
 
         <main className="min-h-screen w-full min-w-0 max-w-[600px] border-slate-100 pb-16 sm:border-x sm:pb-0">
           {!supabaseConfigured && (
-            <ErrorBanner message="Supabase isn't configured. Copy .env.example to .env.local, fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the dev server." />
+            <ErrorBanner message="Supabase isn't configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the repository-root .env, then restart the dev server." />
           )}
           <Outlet />
         </main>

@@ -4,23 +4,19 @@ A small standalone React app that imitates a microblog. It is a **mock outside d
 
 All data lives in the `mockr` schema in Supabase (`supabase/migrations/0004_mockr.sql`). This app never touches the `public` or `mockreddit` schemas.
 
-## Setup
+## Setup (hosted Supabase)
 
-1. Apply `supabase/migrations/0004_mockr.sql` to the Supabase project (SQL Editor → paste → Run).
-2. **Supabase → Project Settings → Data API → Exposed schemas → add `mockr`.** Without this, every request fails.
-3. Copy `.env.example` to `.env.local` and fill in:
+Put the hosted project's `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the repository-root `.env`; both Vite apps load this shared file. Apply migrations `0001`–`0006` from the repository's `supabase/migrations/` directory to the hosted project in numeric order, then expose `public`, `graphql_public`, `mockreddit`, and `mockr` in its API settings. Migration `0004_mockr.sql` depends on `public.feedback_posts` created by `0001`.
 
-   | Variable | Value |
-   |---|---|
-   | `VITE_SUPABASE_URL` | Project URL only, e.g. `https://abcd.supabase.co` (**not** the `…/rest/v1/` endpoint) |
-   | `VITE_SUPABASE_ANON_KEY` | Publishable / anon key. **Never** the secret or service_role key: everything prefixed `VITE_` ships to the browser. |
+The Vite anon key is public. Never put a service-role key or database password in the frontend environment.
 
-4. Run it:
-   ```bash
-   npm install
-   npm run dev      # http://localhost:5175
-   npm run build    # type-check + production build
-   ```
+Run this app:
+
+```bash
+npm install
+npm run dev      # http://localhost:5175
+npm run build    # type-check + production build
+```
 
 ## Routes
 
