@@ -31,6 +31,9 @@ export function Layout() {
             r/{COMMUNITY}
           </Link>
           <div className="flex-1" />
+          <Link to="/dev/api" className="rounded-full px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 lg:hidden">
+            API
+          </Link>
           <button
             type="button"
             onClick={() => setCreating(true)}
@@ -70,6 +73,13 @@ export function Layout() {
             <ol className="list-inside list-decimal space-y-1.5 text-sm text-slate-700">
               {RULES.map((r) => <li key={r}>{r}</li>)}
             </ol>
+          </section>
+          <section className="rounded-lg border border-slate-200 bg-white p-4">
+            <h2 className="mb-1 font-bold">Developers</h2>
+            <p className="mb-2 text-sm text-slate-600">Read r/{COMMUNITY} as JSON, Reddit-style.</p>
+            <Link to="/dev/api" className="text-sm font-semibold text-accent-dark hover:underline">
+              API docs →
+            </Link>
           </section>
         </aside>
       </div>

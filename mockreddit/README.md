@@ -14,9 +14,26 @@ Run this app:
 
 ```bash
 npm install
-npm run dev      # http://localhost:5174
-npm run build    # type-check + production build
+npm run dev      # web on http://localhost:5174 + API server on :4174 (API paths proxied through 5174)
+npm run dev:web  # web only
+npm run dev:api  # API server only
+npm test         # API tests (Supabase mocked)
+npm run build    # type-check web + server, production build
+npm start        # production: one process serves the API and dist/ on $PORT (default 4174)
 ```
+
+## Public JSON API
+
+`server/` is a small Express app that exposes Reddit-shaped endpoints. The agent pipeline reads Riotdit **only through these endpoints**, using nothing but the site's URL:
+
+- `/r/PatchworkTFT/{new,hot,top}.json`
+- `/r/PatchworkTFT/comments/:id.json`
+- `/r/PatchworkTFT/about.json`
+- `/api/health`
+
+Full docs, field mapping and a reference fetcher are in [API.md](API.md). The same docs, plus a "Try it" box, are in the app at `/dev/api`.
+
+The server reads `SUPABASE_URL` and `SUPABASE_ANON_KEY`, falling back to the `VITE_` names; it's the same public anon key. It refuses to start with a service-role or secret key.
 
 ## Routes
 
@@ -24,6 +41,7 @@ npm run build    # type-check + production build
 |---|---|
 | `/r/PatchworkTFT` | Feed (`?sort=hot\|new\|top`, `?flair=Balance`) |
 | `/r/PatchworkTFT/post/:id` | Post + comments |
+| `/dev/api` | Developer docs for the public JSON API, with a "Try it" box |
 | `/_debug/listing` | **Dev only.** Raw JSON from `listing('new', 25)`: exactly what the pipeline receives |
 
 ## Backend API (RPCs in the `mockreddit` schema)
