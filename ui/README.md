@@ -2,19 +2,67 @@
 
 Front end for our Riot Track · Prompt 02 (Agentic Development) project. Agents collect player feedback from Reddit and X, turn the biggest issues into editable change specs, build the change, and check it with bot playtests. A person has to approve every step, because the prompt's rule is *"Verify the result yourself. Don't trust the agent saying it's done."*
 
-This is a working prototype. Agent output, posts, and playtest results are simulated in the browser, so the whole flow can be demoed without a backend.
+This is a working prototype. Issues are loaded from a Supabase backend; agent output, posts, and playtest results are still simulated in the browser, so the whole flow can be demoed with just the issue data in Supabase.
 
 ## Quick start
 
 ```bash
 cd ui
 npm install        # first time only
+cp .env.example .env.local   # then fill in the Supabase keys (see below)
 npm run dev        # → http://localhost:5173
 ```
 
 - Port 5173 is fixed (`strictPort`). The other apps in this repo use 5174 (`mockreddit`) and 5175 (`mockr`).
 - `npm run build && npm run preview` serves the production build on 5173 too.
 - `npm run lint` runs oxlint (currently clean).
+
+## Supabase
+
+Issues come from a Supabase project. The app reads from the shared `issues`
+table and a UI-owned companion table on load; the client-side agent simulation
+runs on top of that for now (see [Connecting the real backend](#connecting-the-real-backend)).
+
+### Environment
+
+Create `ui/.env.local` (gitignored) with the project's publishable/anon key:
+
+```
+VITE_SUPABASE_URL=https://<project>.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_...
+# Server-side only, for the one-time data push (never shipped to the browser):
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
+```
+
+If `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are missing, the app falls
+back to the in-browser seed (offline/demo mode) instead of Supabase.
+
+### Schema and data (`supabase/`)
+
+Issues live in the existing run-centric schema (`runs`, `issues`, …). The UI
+needs display state those tables don't carry (stage, status, tags, devs, spec
+versions, builds, playtests, comments, audit), so we add three companion tables.
+Run these once, in the Supabase SQL Editor, in order:
+
+1. `supabase/ui_tables.sql` — creates `ui_issue_meta` (1:1 with `issues`),
+   `ui_source_status`, `ui_ingest`; enables RLS with anon read/write policies.
+2. `supabase/ui_grants.sql` — grants table privileges to the API roles.
+
+Then push the seed data (uses the service-role key from `.env.local`, bypasses
+RLS, idempotent):
+
+```bash
+node --loader ./supabase/ext-resolver.mjs supabase/push-seed.mjs
+```
+
+It writes one anchor `runs` row, maps each seed issue onto the real `issues`
+columns, and stores the UI-only fields in `ui_issue_meta`. The existing
+`issues.target_type` only allows `unit | trait`, so other targets (item,
+system, bug) are stored as `unit`; the full tag set is preserved in
+`ui_issue_meta.tags`, which is what the UI renders.
+
+Sanity-check reads through the anon key with
+`node supabase/verify-read.mjs`.
 
 ## The flow
 
@@ -193,11 +241,12 @@ ui/
     ├── index.css           theme tokens, Riot button, tag pills, selection style
     ├── data/
     │   ├── constants.js    stages, board columns, statuses, agents, tags, devs
-    │   ├── seed.js         demo issues, posts, stats, tags, assignments
-    │   └── generators.js   stand-ins for agent output: specs, builds, playtests, posts
+    │   ├── seed.js         demo issues, posts, stats, tags, assignments (seed source for the push + offline fallback)
+    │   ├── generators.js   stand-ins for agent output: specs, builds, playtests, posts
+    │   └── supabase.js     browser client + loadStateFromSupabase() (issues + ui_* → UI shape)
     ├── store/
-    │   ├── reducer.js      every pipeline action + simulated agent runs
-    │   └── pipeline.jsx    provider, agent tick, localStorage persistence
+    │   ├── reducer.js      every pipeline action + simulated agent runs (HYDRATE loads Supabase state)
+    │   └── pipeline.jsx    provider; loads from Supabase on mount, agent tick
     ├── hooks/
     │   ├── useAgentStream.js   live agent status for an issue (swap for SSE/WebSocket)
     │   └── useTheme.js         light/dark
@@ -215,8 +264,16 @@ Stack: Vite 8 · React 19 · React Router 7 · Tailwind CSS 4 · Recharts · rea
 
 ## Connecting the real backend
 
+**Done:** issues load from Supabase on startup (`src/data/supabase.js` →
+`loadStateFromSupabase()`, dispatched as `HYDRATE` in `pipeline.jsx`). Supabase
+is the only source of issues; there's no mock fallback when it's configured.
+Still in the browser: the agent simulation and all write actions.
+
+Remaining to go fully server-backed:
+
+- **Writes:** reducer actions (`SEND_TO_SPEC`, `SPEC_APPROVE`, `PLAYTEST_VERIFY`, …) still mutate local state only. Persist each to Supabase (and ideally subscribe to realtime changes to replace the local `TICK`).
 - **Agents:** replace the reducer's simulated `run` (and `useAgentStream`) with server events. Keep the shapes (`Issue`, `specVersions[]`, `build`, `builds[]`, `playtest`, `playtests[]`) and the UI keeps working. Everything is keyed by issue ID.
-- **Posts:** swap `makeClusterPosts` for a paginated `GET /issues/:id/posts?platform=&q=&cursor=` sorted by score, and fill in each post's link.
+- **Posts:** swap `makeClusterPosts` for a paginated `GET /issues/:id/posts?platform=&q=&cursor=` sorted by score, and fill in each post's link. (The existing `feedback_posts` table is the likely source.)
 - **Gate:** the "at least one dev assigned" rule is enforced in the reducer (`SEND_TO_SPEC`), not only in the buttons. Keep it server-side too.
 
 ## Not done yet
