@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { APP_NAME } from './config';
 import { ToastProvider } from './lib/toast';
+import Developers from './pages/Developers';
 import Home from './pages/Home';
 import NotFound from './pages/NotFound';
 import PostDetail from './pages/PostDetail';
@@ -26,6 +27,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/post/:id" element={<PostDetail />} />
             <Route path="/u/:username" element={<Profile />} />
             <Route path="/search" element={<Search />} />
+            <Route path="/developers" element={<Developers />} />
             {DebugSearch && (
               <Route path="/_debug/search" element={<Suspense fallback={null}><DebugSearch /></Suspense>} />
             )}
