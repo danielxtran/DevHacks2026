@@ -47,6 +47,7 @@ export function usePipeline() {
   return useContext(Ctx)
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useIssue(id) {
   const { state } = usePipeline()
   return state.issues.find((i) => i.id === id)

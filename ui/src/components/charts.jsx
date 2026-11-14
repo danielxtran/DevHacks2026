@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { useTheme } from '../hooks/useTheme'
 import { Area, AreaChart, CartesianGrid, Legend, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 // Two-series palette validated for the dark surface (dataviz validator: all checks pass,
 // CVD ΔE ≥ 20). Text never uses these colors; they mark identity only.
-export const SERIES = { before: '#4F8FD6', after: '#D4703A' }
-export const SINGLE = '#E0605F'
+const SERIES = { before: '#4F8FD6', after: '#D4703A' }
+const SINGLE = '#E0605F'
 
 // Chart chrome per theme (SVG attributes can't read CSS variables, so these mirror index.css).
 const CHROME = {
@@ -75,7 +76,7 @@ export function DataTable({ cols, rows }) {
 
 export function MentionTrend({ trend }) {
   const { c, axis, grid } = useChrome()
-  const today = new Date()
+  const [today] = useState(() => new Date()) // read once so the x-axis doesn't shift between renders
   const data = trend.map((v, i) => {
     const d = new Date(today)
     d.setDate(d.getDate() - (trend.length - 1 - i))

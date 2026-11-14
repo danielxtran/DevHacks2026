@@ -6,7 +6,7 @@ import { Sparkline } from '../components/evidence'
 import { Sources, StatusBadge } from '../components/badges'
 import { Button, Menu, MenuItem, StateView } from '../components/ui'
 import { num, trendScore } from '../components/format'
-import { Select } from './Overview'
+import { Select } from './Board'
 
 const SORTS = {
   popular: ['Most popular', (a, b) => b.mentions - a.mentions],
@@ -95,10 +95,12 @@ function Row({ issue, rank, others }) {
   )
 }
 
-export default function Feedback() {
+export default function List() {
   const { state, dispatch } = usePipeline()
   const [sort, setSort] = useState('popular')
   const [f, setF] = useState(NO_FILTERS)
+  // Date filters compare against when the page opened (read once, not on every render).
+  const [now] = useState(() => Date.now())
   const [showFilters, setShowFilters] = useState(false)
   const [showDismissed, setShowDismissed] = useState(false)
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }))
@@ -106,7 +108,7 @@ export default function Feedback() {
 
   const visible = state.issues.filter((i) => !i.mergedInto)
   const list = useMemo(() => {
-    const cutoff = Date.now() - RANGES[f.range][1] * 3600 * 1000
+    const cutoff = now - RANGES[f.range][1] * 3600 * 1000
     return visible
       .filter((i) => showDismissed || !i.dismissed)
       .filter((i) => f.source === 'all' || i.sources[f.source] > 0)
@@ -115,7 +117,7 @@ export default function Feedback() {
       .filter((i) => f.game === 'all' || i.game === f.game)
       .filter((i) => f.range === 'all' || new Date(i.lastMention).getTime() >= cutoff)
       .sort(SORTS[sort][1])
-  }, [visible, sort, f, showDismissed])
+  }, [visible, sort, f, showDismissed, now])
 
   const failing = Object.entries(state.sourceStatus).filter(([, s]) => s.state === 'error')
 

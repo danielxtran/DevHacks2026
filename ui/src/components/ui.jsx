@@ -17,10 +17,6 @@ export function Button({ variant = 'secondary', size = 'md', className = '', to,
   return <button className={cls} {...rest}>{children}</button>
 }
 
-export function Label({ children, className = '', as: Comp = 'span', ...rest }) {
-  return <Comp className={`text-xs text-muted ${className}`} {...rest}>{children}</Comp>
-}
-
 /** Section with a small heading and a hairline above it. */
 export function Section({ title, right, children, className = '' }) {
   return (
@@ -38,8 +34,8 @@ export function Section({ title, right, children, className = '' }) {
 
 /** One component for the shared states every component must define. */
 export function StateView({ kind, title, children, action }) {
-  const icon = { empty: '○', loading: '◐', error: '!', needs_human: '◆', done: '✓' }[kind]
-  const tone = { empty: 'text-muted', loading: 'text-info animate-pulse-soft', error: 'text-warning', needs_human: 'text-accent-text', done: 'text-success' }[kind]
+  const icon = { empty: '○', loading: '◐', error: '!', done: '✓' }[kind]
+  const tone = { empty: 'text-muted', loading: 'text-info animate-pulse-soft', error: 'text-warning', done: 'text-success' }[kind]
   return (
     <div role={kind === 'error' ? 'alert' : 'status'} className="py-16 text-center">
       <span aria-hidden className={`font-mono text-xl ${tone}`}>{icon}</span>

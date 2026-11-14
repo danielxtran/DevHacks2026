@@ -1,11 +1,11 @@
-import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { usePipeline } from './store/pipeline'
 import { Button, Menu, MenuItem, StateView } from './components/ui'
 import ErrorBoundary from './components/ErrorBoundary'
 import RiotLogo from './components/RiotLogo'
 import { useTheme } from './hooks/useTheme'
-import Overview from './pages/Overview'
-import Feedback from './pages/Feedback'
+import Board from './pages/Board'
+import List from './pages/List'
 import IssueLayout from './pages/IssueLayout'
 import IssueDetail from './pages/IssueDetail'
 import SpecWorkspace from './pages/SpecWorkspace'
@@ -77,7 +77,7 @@ function TopBar() {
         </Link>
         <nav aria-label="Main" className="flex h-full items-center gap-2">
           <NavItem to="/" end>Board</NavItem>
-          <NavItem to="/feedback">List</NavItem>
+          <NavItem to="/list">List</NavItem>
         </nav>
         <div className="ml-auto flex items-center gap-3">
           {running > 0 && (
@@ -105,8 +105,10 @@ export default function App() {
       <main id="main" className="mx-auto max-w-6xl px-6 pb-24 pt-10">
         <ErrorBoundary key={pathname}>
           <Routes>
-            <Route path="/" element={<Overview />} />
-            <Route path="/feedback" element={<Feedback />} />
+            <Route path="/" element={<Board />} />
+            <Route path="/list" element={<List />} />
+            {/* Old address for the List tab */}
+            <Route path="/feedback" element={<Navigate to="/list" replace />} />
             <Route path="/issues/:id" element={<IssueLayout />}>
               <Route index element={<IssueDetail />} />
               <Route path="spec" element={<SpecWorkspace />} />

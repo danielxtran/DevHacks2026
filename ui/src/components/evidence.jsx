@@ -18,25 +18,6 @@ export function Sparkline({ data, width = 72, height = 20 }) {
   )
 }
 
-/** Quoted player post with source link, timestamp and engagement. */
-export function EvidenceBlock({ post }) {
-  return (
-    <figure className="py-4">
-      {post.pinned && <div className="mb-1 text-xs text-muted">Representative post</div>}
-      <blockquote className="leading-relaxed">“{post.text}”</blockquote>
-      <figcaption className="mt-2 flex flex-wrap gap-x-3 text-xs text-muted">
-        <span className="text-text">{post.author}</span>
-        <span>{SOURCES[post.source]?.label}</span>
-        <time dateTime={post.ts}>{timeAgo(post.ts)}</time>
-        <span>{num(post.engagement.likes)} likes · {num(post.engagement.replies)} replies</span>
-        <a href={`#${post.id}`} onClick={(e) => e.preventDefault()} title="Sample post: no live link in the demo" className="underline decoration-border underline-offset-4 hover:text-text">
-          source ↗
-        </a>
-      </figcaption>
-    </figure>
-  )
-}
-
 const PAGE = 15
 
 /** One post in the browser: score, then the title linking to the original (empty href until the backend is connected). */

@@ -6,12 +6,8 @@ import { Section, StateView, UpvoteIcon } from '../components/ui'
 import { StatusBadge } from '../components/badges'
 import { num } from '../components/format'
 
-export const GATE = {
-  feedback: { verb: 'Triage', route: '' },
-  spec: { verb: 'Approve spec', route: '/spec' },
-  playtest: { verb: 'Verify playtest', route: '/playtest' },
-  verified: { verb: 'Verified', route: '/verified' },
-}
+// Which issue page a card opens, by stage.
+const STAGE_ROUTE = { feedback: '', spec: '/spec', playtest: '/playtest', verified: '/verified' }
 
 const STAGE_LABEL = Object.fromEntries(STAGES.map((s) => [s.id, s.label]))
 
@@ -44,15 +40,9 @@ export function Select({ label, value, onChange, options, dot }) {
       <span className="relative inline-flex items-center">
         {dot && <span aria-hidden className="pointer-events-none absolute left-3.5 h-2.5 w-2.5 rounded-full" style={{ background: dot }} />}
         <select value={value} onChange={(e) => onChange(e.target.value)} className="select-pill" style={dot ? { paddingLeft: '2.1rem' } : undefined}>
-          {options.map((o) =>
-            o[0] === '__group' ? (
-              <optgroup key={o[1]} label={o[1]}>
-                {o[2].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </optgroup>
-            ) : (
-              <option key={o[0]} value={o[0]}>{o[1]}</option>
-            ),
-          )}
+          {options.map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
         </select>
       </span>
     </label>
@@ -97,7 +87,7 @@ function BoardCard({ issue, showStage }) {
   return (
     <li>
       <Link
-        to={`/issues/${issue.id}${GATE[issue.stage].route}`}
+        to={`/issues/${issue.id}${STAGE_ROUTE[issue.stage]}`}
         className={`group block rounded-lg border bg-card p-3.5 shadow-sm transition-[transform,background-color,border-color] hover:-translate-y-px hover:bg-card-hover ${failed ? 'border-warning/60' : working ? 'border-accent/60' : 'border-border hover:border-border-strong'}`}
       >
         {showStage && <div className="mb-1.5 text-xs text-muted">{STAGE_LABEL[issue.stage]}</div>}
@@ -113,12 +103,14 @@ function BoardCard({ issue, showStage }) {
   )
 }
 
-export default function Overview() {
+export default function Board() {
   const { state } = usePipeline()
   const [f, setF] = useState(NO_FILTERS)
+  // Date filters compare against when the page opened (read once, not on every render).
+  const [now] = useState(() => Date.now())
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }))
   const live = state.issues.filter((i) => !i.mergedInto)
-  const cutoff = Date.now() - DATES[f.date][1] * 3600 * 1000
+  const cutoff = now - DATES[f.date][1] * 3600 * 1000
   // All filters combine (AND).
   const shown = live
     .filter((i) => f.platform === 'all' || i.sources[f.platform] > 0)
