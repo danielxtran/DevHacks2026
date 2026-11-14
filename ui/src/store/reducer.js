@@ -149,6 +149,11 @@ export function reducer(state, action) {
   const consumeFail = (s) => (s.demo.failNext ? { ...s, demo: { ...s.demo, failNext: false } } : s)
 
   switch (type) {
+    case 'HYDRATE':
+      // Replace the whole state with data loaded from Supabase. Preserves the
+      // local-only demo flag so the Demo menu keeps working.
+      return { ...action.state, demo: state.demo ?? { failNext: false } }
+
     case 'TICK': {
       let changed = false
       const issues = state.issues.map((issue) => {
