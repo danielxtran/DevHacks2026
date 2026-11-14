@@ -22,10 +22,32 @@ See [`.env.example`](.env.example) and [`backend/.env.example`](backend/.env.exa
 
 ## Run the apps
 
+Use Node.js **22.12 or newer**. After configuring the hosted project and environment files above, install dependencies once from the repository root:
+
 ```bash
-cd mockreddit && npm install && npm run dev  # http://localhost:5174
-cd mockr && npm install && npm run dev       # http://localhost:5175
-cd backend && npm install && npm run dev     # http://127.0.0.1:3001
+npm --prefix backend ci
+npm --prefix ui ci
+npm --prefix mockreddit ci
+npm --prefix mockr ci
+```
+
+Start the backend and all three frontends in one terminal:
+
+```bash
+./scripts/start.mjs
+```
+
+- Pipeline UI: http://127.0.0.1:5173 (currently a browser-only prototype, not yet connected to the backend)
+- Riotdit: http://127.0.0.1:5174
+- R: http://127.0.0.1:5175
+- Backend: http://127.0.0.1:3001 (`API_PORT` may override this)
+
+The launcher checks dependencies and occupied ports before starting, suppresses automatic browser opening, and stops its app process groups on Ctrl+C or an app exit. It works from any working directory on Linux/macOS/WSL. It does not install packages, apply migrations, reset data, or start the simulator (its current defaults conflict with the dashboard/backend ports). Each app loads its own environment; backend-only secrets are not copied into Vite processes. The backend starts polling and can make billable model calls when credentials are configured.
+
+For one app, use `npm --prefix <app> run dev` instead. Launcher tests use fake app processes and no hosted database/model calls:
+
+```bash
+node --test scripts/start.test.mjs
 ```
 
 The backend loads the repository-root `.env` and binds to loopback. It uses the database URL only on the server. Starting a run also requires `BASELINE_REVISION` and exactly three `SCENARIO_MANIFEST` entries; the external baseline runner is not implemented yet, so the current backend cannot complete a run.
