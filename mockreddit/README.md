@@ -1,4 +1,4 @@
-# Forumly · r/PatchworkTFT (mock subreddit)
+# Riotdit · r/PatchworkTFT (mock subreddit)
 
 A small standalone React app that imitates a subreddit. It is a **mock outside data source** for Patchwork: the agent pipeline pulls player feedback from it as if it were a real website, and judges can post into it live during the demo.
 
@@ -48,5 +48,5 @@ Server-side limits: title 1–300 chars, body ≤ 2000, 20 posts/min and 40 comm
 ## Notes
 
 - User text is always rendered as plain React text (no HTML, no markdown), so pasted `<script>` or prompt-injection payloads display harmlessly.
-- Votes are remembered per browser in `localStorage` (`forumly:votes`). The database doesn't track voters; this is a mock.
+- Votes are remembered per browser in `localStorage` (`riotdit:votes`). The database doesn't track voters; this is a mock.
 - Rename the site or community in `src/config.ts`.

@@ -1,6 +1,6 @@
-// Per-browser vote memory: localStorage 'forumly:votes' → { "post:s001": 1, "comment:c004": -1 }
+// Per-browser vote memory: localStorage 'riotdit:votes' → { "post:s001": 1, "comment:c004": -1 }
 // Storage can be unavailable (private mode, blocked cookies), so every access is guarded.
-const KEY = 'forumly:votes';
+const KEY = 'riotdit:votes';
 export type VoteValue = -1 | 0 | 1;
 
 function readAll(): Record<string, VoteValue> {

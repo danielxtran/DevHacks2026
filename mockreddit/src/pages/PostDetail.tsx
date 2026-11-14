@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { CommentForm } from '../components/CommentForm';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FlairChip } from '../components/FlairChip';
@@ -15,6 +15,9 @@ function addUnique(list: Comment[], c: Comment): Comment[] {
 
 export default function PostDetail() {
   const { id = '' } = useParams();
+  // PostCard passes the feed's query string (?sort=new&flair=…) so "back" returns to the same view.
+  const state = useLocation().state as { feedSearch?: string } | null;
+  const backTo = `${FEED_PATH}${state?.feedSearch ?? ''}`;
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,14 +89,14 @@ export default function PostDetail() {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-10 text-center">
         <p className="font-semibold">Post not found</p>
-        <Link to={FEED_PATH} className="mt-2 inline-block text-sm text-accent-dark underline">Back to r/{COMMUNITY}</Link>
+        <Link to={backTo} className="mt-2 inline-block text-sm text-accent-dark underline">Back to r/{COMMUNITY}</Link>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <Link to={FEED_PATH} className="inline-block text-sm font-medium text-slate-500 hover:text-slate-800">← r/{COMMUNITY}</Link>
+      <Link to={backTo} className="inline-block text-sm font-medium text-slate-500 hover:text-slate-800">← r/{COMMUNITY}</Link>
 
       <article className="flex gap-3 rounded-lg border border-slate-200 bg-white p-4">
         <VoteColumn kind="post" id={post.id} score={post.score} />

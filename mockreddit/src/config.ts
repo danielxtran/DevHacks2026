@@ -1,5 +1,5 @@
 // Rename the site or community in one place.
-export const SITE_NAME = 'Forumly';
+export const SITE_NAME = 'Riotdit';
 export const COMMUNITY = 'PatchworkTFT';
 export const COMMUNITY_TAGLINE = 'Discussion for Patchwork TFT: balance, comps, clips.';
 

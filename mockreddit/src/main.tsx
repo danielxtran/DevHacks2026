@@ -2,7 +2,7 @@ import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { FEED_PATH } from './config';
+import { COMMUNITY, FEED_PATH, SITE_NAME } from './config';
 import { ToastProvider } from './lib/toast';
 import Feed from './pages/Feed';
 import NotFound from './pages/NotFound';
@@ -11,6 +11,9 @@ import './index.css';
 
 // Dev-only route; tree-shaken out of production builds.
 const DebugListing = import.meta.env.DEV ? lazy(() => import('./pages/DebugListing')) : null;
+
+// Keep the tab title in sync with config.ts (index.html has a static fallback).
+document.title = `${SITE_NAME} · r/${COMMUNITY}`;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
