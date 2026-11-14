@@ -1,0 +1,9 @@
+{
+  "changes": [
+    { "type": "unit", "id": "yasuo", "stat": "attackDamage", "value": 20 },
+    { "type": "item", "id": "recurve_bow", "stat": "attackSpeed", "value": 0.2 }
+  ],
+  "simulations": 5000,
+  "seed": 42,
+  "mode": "pvp"
+}
