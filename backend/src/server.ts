@@ -15,14 +15,14 @@ async function main(): Promise<void> {
 
   const artifacts = new ArtifactStore(pool, config.artifactDir);
   const collector = new SourceCollector(pool, {
-    url: config.supabaseUrl, anonKey: config.supabaseAnonKey, maxItems: config.maxCollectedItems,
+    riotditBaseUrl: config.riotditBaseUrl, rBaseUrl: config.rBaseUrl, maxItems: config.maxCollectedItems,
   });
-  const discovery = new DiscoveryAgent(pool, config.anthropicApiKey, config.anthropicModel);
+  const discovery = new DiscoveryAgent(pool, config.openaiApiKey, config.openaiModel);
   const worker = new WorkerLoop(collector, discovery, config.pollIntervalMs);
   const app = createApp({
     pool, artifacts, baselineRevision: config.baselineRevision, scenarios: config.scenarios,
-    sourceConfigured: Boolean(config.supabaseAnonKey),
-    discoveryConfigured: Boolean(config.anthropicApiKey && config.anthropicModel),
+    sourceConfigured: Boolean(config.riotditBaseUrl && config.rBaseUrl),
+    discoveryConfigured: Boolean(config.openaiApiKey && config.openaiModel),
   });
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => {

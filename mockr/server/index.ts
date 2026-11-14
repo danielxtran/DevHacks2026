@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './app';
-import { parseTokens } from './auth';
 import { createDb } from './db';
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,12 +31,6 @@ if (key.startsWith('sb_secret_')) {
   process.exit(1);
 }
 
-// Drop short tokens and the .env.example placeholder, so a copied template never becomes a working token.
-const all = parseTokens(process.env.R_API_TOKENS);
-const tokens = all.filter((t) => t.length >= 16 && !t.startsWith('replace-with'));
-if (tokens.length < all.length) console.warn(`Ignoring ${all.length - tokens.length} R_API_TOKENS entr(y/ies): placeholder or shorter than 16 characters.`);
-if (!tokens.length) console.warn('No R_API_TOKENS configured: every /2/* request will get 401. Generate one with `openssl rand -hex 24`.');
-
 const prod = process.argv.includes('--prod') || process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT) || 4175;
 const host = process.env.HOST || (prod ? '0.0.0.0' : '127.0.0.1');
@@ -45,11 +38,10 @@ const trust = process.env.TRUST_PROXY;
 
 const app = createApp({
   db: createDb(url, key),
-  tokens,
   staticDir: prod ? path.join(appDir, 'dist') : undefined,
   trustProxy: trust === undefined ? 'loopback' : /^\d+$/.test(trust) ? Number(trust) : trust === 'true' ? true : trust,
 });
 
 app.listen(port, host, () => {
-  console.log(`R API listening on http://${host === '0.0.0.0' ? 'localhost' : host}:${port} with ${tokens.length} token(s)${prod ? ', serving dist/ too' : ''}`);
+  console.log(`R API listening on http://${host === '0.0.0.0' ? 'localhost' : host}:${port} (public, no auth)${prod ? ', serving dist/ too' : ''}`);
 });

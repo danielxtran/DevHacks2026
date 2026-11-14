@@ -8,15 +8,14 @@ interface Endpoint {
   key: EndpointKey;
   label: string;
   path: string;
-  auth: boolean;
   description: string;
 }
 
 const ENDPOINTS: Endpoint[] = [
-  { key: 'search', label: 'Search recent', path: '/2/tweets/search/recent', auth: true, description: 'Posts matching a query, newest first. Paged with next_token.' },
-  { key: 'tweet', label: 'Post by id', path: '/2/tweets/:id', auth: true, description: 'One post. Unknown ids return 200 with an errors array.' },
-  { key: 'tweets', label: 'Posts by ids', path: '/2/tweets?ids=', auth: true, description: 'Up to 100 comma-separated ids; missing ones come back in errors.' },
-  { key: 'health', label: 'Health', path: '/api/health', auth: false, description: 'Service status. Public, no token. 503 when the data store is down.' },
+  { key: 'search', label: 'Search recent', path: '/2/tweets/search/recent', description: 'Posts matching a query, newest first. Paged with next_token.' },
+  { key: 'tweet', label: 'Post by id', path: '/2/tweets/:id', description: 'One post. Unknown ids return 200 with an errors array.' },
+  { key: 'tweets', label: 'Posts by ids', path: '/2/tweets?ids=', description: 'Up to 100 comma-separated ids; missing ones come back in errors.' },
+  { key: 'health', label: 'Health', path: '/api/health', description: 'Service status. 503 when the data store is down.' },
 ];
 
 const SAMPLE_ID = '1850000000000000001';
@@ -90,18 +89,14 @@ export default function Developers() {
   const base = window.location.origin;
   const curl = (key: EndpointKey) => {
     const p = buildPath(key, { query: '#TFT', maxResults: '100', nextToken: '', id: SAMPLE_ID, ids: `${SAMPLE_ID},1850000000000000101` });
-    const ep = ENDPOINTS.find((e) => e.key === key)!;
-    return ep.auth ? `curl -H "Authorization: Bearer $R_TOKEN" \\\n  "${base}${p}"` : `curl "${base}${p}"`;
+    return `curl "${base}${p}"`;
   };
 
-  // The token lives in component state only: never written to storage, the URL, or logs.
-  const [token, setToken] = useState('');
   const [key, setKey] = useState<EndpointKey>('search');
   const [params, setParams] = useState<Params>({ query: '#TFT', maxResults: '10', nextToken: '', id: SAMPLE_ID, ids: `${SAMPLE_ID},1850000000000000101` });
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ status: number; ms: number; headers: string; body: string; next: string | null } | null>(null);
 
-  const ep = ENDPOINTS.find((e) => e.key === key)!;
   const path = useMemo(() => buildPath(key, params), [key, params]);
   const set = (k: keyof Params) => (e: { target: { value: string } }) => setParams((p) => ({ ...p, [k]: e.target.value }));
 
@@ -109,9 +104,7 @@ export default function Developers() {
     setBusy(true);
     const t0 = performance.now();
     try {
-      const headers: Record<string, string> = { Accept: 'application/json' };
-      if (ep.auth && token.trim()) headers.Authorization = `Bearer ${token.trim()}`;
-      const res = await fetch(p, { headers });
+      const res = await fetch(p, { headers: { Accept: 'application/json' } });
       const text = await res.text();
       let body = text;
       let next: string | null = null;
@@ -156,10 +149,10 @@ export default function Developers() {
         <p className="text-xs font-bold uppercase tracking-wider text-accent-dark">Developer platform</p>
         <h1 className="mt-1 text-2xl font-extrabold leading-tight">Build with the {APP_NAME} API</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Read-only access to public posts, in the same shape as the X API v2. Authenticate with an app-only bearer token.
+          Read-only access to public posts, in the same shape as the X API v2. No key or token needed.
         </p>
         <nav className="mt-3 flex flex-wrap gap-2 text-sm font-semibold">
-          {[['auth', 'Auth'], ['endpoints', 'Endpoints'], ['query', 'Query syntax'], ['limits', 'Rate limits'], ['errors', 'Errors'], ['try', 'Try it']].map(([id, t]) => (
+          {[['endpoints', 'Endpoints'], ['query', 'Query syntax'], ['limits', 'Rate limits'], ['errors', 'Errors'], ['try', 'Try it']].map(([id, t]) => (
             <a key={id} href={`#${id}`} className="rounded-full border border-slate-200 bg-white px-3 py-1 hover:bg-slate-50">{t}</a>
           ))}
         </nav>
@@ -167,15 +160,8 @@ export default function Developers() {
 
       <Section id="base" title="Base URL">
         <Code>{base}</Code>
-      </Section>
-
-      <Section id="auth" title="Authentication">
         <p className="text-sm text-slate-700">
-          Every <span className={mono}>/2/*</span> request needs an app-only bearer token in the header:
-        </p>
-        <Code>{'Authorization: Bearer $R_TOKEN'}</Code>
-        <p className="text-sm text-slate-700">
-          Tokens are issued by the {APP_NAME} team. Keep them server-side and never put one in a URL. A missing or invalid token returns <span className={mono}>401</span>.
+          The API is public: no authentication, keys or tokens. An <span className={mono}>Authorization</span> header is ignored if you send one.
         </p>
       </Section>
 
@@ -186,7 +172,6 @@ export default function Developers() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">GET</span>
                 <code className="font-mono text-sm font-semibold">{e.path}</code>
-                {!e.auth && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">public</span>}
               </div>
               <p className="text-sm text-slate-600">{e.description}</p>
               <Code>{curl(e.key)}</Code>
@@ -230,7 +215,7 @@ export default function Developers() {
 
       <Section id="limits" title="Rate limits">
         <p className="text-sm text-slate-700">
-          <strong>180 requests per 15 minutes</strong> per token (per IP without a valid token). Every <span className={mono}>/2/*</span> response has:
+          <strong>180 requests per 15 minutes</strong> per IP. Every <span className={mono}>/2/*</span> response has:
         </p>
         <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
           <li><span className={mono}>x-rate-limit-limit</span>: requests allowed per window</li>
@@ -241,10 +226,9 @@ export default function Developers() {
       </Section>
 
       <Section id="errors" title="Errors">
-        <Code>{'{ "title": "Unauthorized", "type": "about:blank", "status": 401, "detail": "Unauthorized" }'}</Code>
+        <Code>{'{ "title": "Invalid Request", "type": "about:blank", "status": 400, "detail": "Invalid \\"query\\" parameter: is required" }'}</Code>
         <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
           <li><span className={mono}>400</span>: invalid params (<span className={mono}>detail</span> names the param)</li>
-          <li><span className={mono}>401</span>: missing or invalid token</li>
           <li><span className={mono}>404</span>: unknown route</li>
           <li><span className={mono}>429</span>: rate limited</li>
           <li><span className={mono}>502</span> / <span className={mono}>500</span>: upstream or server failure</li>
@@ -254,18 +238,6 @@ export default function Developers() {
 
       <Section id="try" title="Try it">
         <form onSubmit={submit} className="space-y-3">
-          <label className={label}>
-            Bearer token
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="paste a token (kept in memory only)"
-              className={`${input} font-mono`}
-            />
-          </label>
           <label className={label}>
             Endpoint
             <select value={key} onChange={(e) => { setKey(e.target.value as EndpointKey); setResult(null); }} className={input}>
@@ -287,7 +259,6 @@ export default function Developers() {
             <button type="submit" disabled={busy} className="rounded-full bg-accent px-5 py-2 text-sm font-bold text-white hover:bg-accent-dark disabled:opacity-50">
               {busy ? 'Sending…' : 'Send'}
             </button>
-            {ep.auth && !token.trim() && <span className="text-xs text-slate-500">No token: expect a 401.</span>}
           </div>
           <p className="break-all font-mono text-xs text-slate-500">GET {path}</p>
         </form>
