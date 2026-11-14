@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="280" viewBox="0 80 640 280" fill="none">
+  <!-- Original Hexlab geometry. No third-party logos or game artwork. -->
+  <path d="M350-80 620 76v312L350 544 80 388V76Z" stroke="#2e2e2e"/>
+  <path d="m350-20 218 126v252L350 484 132 358V106Z" fill="#202020" stroke="#363030"/>
+  <path d="m350 40 166 96v192l-166 96-166-96V136Z" fill="#252020" stroke="#6c3335"/>
+  <path d="m350 100 114 66v132l-114 66-114-66V166Z" fill="#d13639"/>
+  <path d="M313 185v94m74-94v94m-74-47h74" stroke="#ece8e1" stroke-width="15"/>
+  <path d="m80 76 156 90M568 106l-104 60M350-20v120" stroke="#664042"/>
+  <circle cx="132" cy="106" r="4" fill="#d13639"/>
+  <circle cx="568" cy="106" r="4" fill="#d13639"/>
+</svg>

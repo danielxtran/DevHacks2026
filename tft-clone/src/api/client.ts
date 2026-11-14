@@ -1,0 +1,3 @@
+import type { BalanceComparison, GameConfig, SimulationRequest } from '../engine/types';
+export async function fetchConfig():Promise<GameConfig>{const response=await fetch('/api/config');if(!response.ok)throw new Error('Could not load baseline configuration');const data=await response.json();return data.config??data;}
+export async function submitPatch(request:SimulationRequest):Promise<BalanceComparison>{const response=await fetch('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});const data=await response.json();if(!response.ok)throw new Error(data.error??'Simulation failed');return data;}
