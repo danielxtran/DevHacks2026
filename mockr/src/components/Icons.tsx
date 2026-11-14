@@ -12,6 +12,11 @@ export const SearchIcon = ({ className = base }: P) => (
     <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
   </svg>
 );
+export const CodeIcon = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m8 7-5 5 5 5" /><path d="m16 7 5 5-5 5" /><path d="m13.5 4-3 16" />
+  </svg>
+);
 export const PenIcon = ({ className = base }: P) => (
   <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /><path d="m13.5 6.5 4 4" />
