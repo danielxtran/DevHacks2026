@@ -1,6 +1,6 @@
 # R developer API (X API v2-shaped)
 
-R serves its own read-only developer API, shaped like the X API v2, with app-only bearer tokens. The pipeline should pull R posts **only through this API**, using R's URL and a token. It doesn't need Supabase credentials or any knowledge of the database.
+R serves its own read-only developer API, shaped like the X API v2. The pipeline should pull R posts **only through this API**, using nothing but R's URL. It doesn't need Supabase credentials or any knowledge of the database.
 
 | | Base URL |
 |---|---|
@@ -11,19 +11,7 @@ Interactive docs with a "Try it" console: `<base>/developers`.
 
 ## Auth
 
-Every `/2/*` request needs an app-only bearer token:
-
-```
-Authorization: Bearer $R_TOKEN
-```
-
-- **Getting a token:** ask Daniel. Valid tokens are the comma-separated `R_API_TOKENS` on the server (generate one with `openssl rand -hex 24`).
-- **Errors:** a missing or wrong token returns 401:
-  ```json
-  { "title": "Unauthorized", "type": "about:blank", "status": 401, "detail": "Unauthorized" }
-  ```
-- **Logging:** the server never logs a token, only its first 4 characters.
-- **No auth:** `/api/health` is public.
+None. Every endpoint is public: no keys or tokens. If a client sends an `Authorization` header, it's ignored and never logged.
 
 ## Endpoints
 
@@ -72,7 +60,7 @@ Users in `includes.users` look like `{ "id": "anon_nnzz0", "username": "anon_nnz
 Boolean operators, quotes and combining operators aren't supported.
 
 ```bash
-curl -H "Authorization: Bearer $R_TOKEN" \
+curl \
   "http://localhost:5175/2/tweets/search/recent?query=%23TFT&max_results=100"
 ```
 
@@ -108,7 +96,7 @@ search/recent?query=*&max_results=100&next_token=185…412      → meta.next_to
 ### Threads
 
 ```bash
-curl -H "Authorization: Bearer $R_TOKEN" \
+curl \
   "http://localhost:5175/2/tweets/search/recent?query=conversation_id:1850000000000010079&max_results=100"
 ```
 
@@ -117,8 +105,8 @@ This returns the root and every reply, newest first, in the same shape as above.
 ### `GET /2/tweets/:id` and `GET /2/tweets?ids=`
 
 ```bash
-curl -H "Authorization: Bearer $R_TOKEN" "http://localhost:5175/2/tweets/1850000000000010079"
-curl -H "Authorization: Bearer $R_TOKEN" "http://localhost:5175/2/tweets?ids=1850000000000010079,1850000000000010080,1"
+curl "http://localhost:5175/2/tweets/1850000000000010079"
+curl "http://localhost:5175/2/tweets?ids=1850000000000010079,1850000000000010080,1"
 ```
 
 ```jsonc
@@ -146,13 +134,12 @@ All errors use the same shape: `{ "title": "...", "type": "about:blank", "status
 | Status | When |
 |---|---|
 | 400 | Invalid params. `detail` names the param, e.g. `Invalid "max_results" parameter: must be an integer from 10 to 100`. |
-| 401 | Missing or invalid token |
 | 404 | Unknown route |
 | 429 | Rate limit exceeded |
 | 502 | The data store failed. Retry later. |
 | 500 | Anything else |
 
-**Rate limit:** 180 requests per 15 minutes **per token**, or per IP without a valid token, in fixed windows. Every `/2/*` response has:
+**Rate limit:** 180 requests per 15 minutes **per IP**, in fixed windows. Every `/2/*` response has:
 
 - `x-rate-limit-limit`: requests allowed per window
 - `x-rate-limit-remaining`: requests left this window
@@ -208,7 +195,7 @@ interface Tweet {
 }
 
 /** Pages search/recent until next_token is absent. Returns mapped rows, parents before replies. */
-export async function fetchAllR(baseUrl: string, token: string, query = '*'): Promise<FeedbackRow[]> {
+export async function fetchAllR(baseUrl: string, query = '*'): Promise<FeedbackRow[]> {
   const tweets = new Map<string, Tweet>();
   let next: string | undefined;
 
@@ -218,7 +205,7 @@ export async function fetchAllR(baseUrl: string, token: string, query = '*'): Pr
     url.searchParams.set('max_results', '100');
     if (next) url.searchParams.set('next_token', next);
 
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(url, { headers: { 'User-Agent': 'patchwork-collector/1.0' } });
     if (res.status === 429) {
       const reset = Number(res.headers.get('x-rate-limit-reset')) * 1000;
       await new Promise((r) => setTimeout(r, Math.max(1000, reset - Date.now())));
@@ -275,7 +262,4 @@ npm run build      # type-check web + server, build dist/
 npm start          # production: one process serves the API and dist/ on $PORT (default 4175)
 ```
 
-The server reads these from `mockr/.env.local`, `mockr/.env`, `../.env.local` or `../.env`:
-
-- **`SUPABASE_URL` and `SUPABASE_ANON_KEY`:** it falls back to the `VITE_` names, since it's the same public anon key. It refuses to start with a service-role or secret key.
-- **`R_API_TOKENS`:** tokens shorter than 16 characters, and the `.env.example` placeholder, are ignored.
+The server reads `SUPABASE_URL` and `SUPABASE_ANON_KEY` from `mockr/.env.local`, `mockr/.env`, `../.env.local` or `../.env`. It falls back to the `VITE_` names, since it's the same public anon key, and refuses to start with a service-role or secret key.

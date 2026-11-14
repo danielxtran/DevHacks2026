@@ -24,16 +24,16 @@ npm start        # production: one process serves the API and dist/ on $PORT (de
 
 ## Developer API (X API v2-shaped)
 
-`server/` is a small Express app with bearer-token auth. The agent pipeline reads R **only through these endpoints**, using nothing but R's URL and a token:
+`server/` is a small Express app. The API is public, with no auth. The agent pipeline reads R **only through these endpoints**, using nothing but R's URL:
 
 - `/2/tweets/search/recent` (`query` supports text, `#tag`, `*`, `conversation_id:<id>` and `from:<user>`)
 - `/2/tweets/:id`
 - `/2/tweets?ids=`
-- `/api/health` (public)
+- `/api/health`
 
 Full docs, field mapping and a reference `fetchAllR()` are in [API.md](API.md). The same docs, with a "Try it" console, are in the app at `/developers`.
 
-The server reads `SUPABASE_URL` and `SUPABASE_ANON_KEY` (falling back to the `VITE_` names; it's the same public anon key) plus `R_API_TOKENS`, a comma-separated list of tokens. Generate one with `openssl rand -hex 24` and put it in `mockr/.env.local`, which is gitignored. See `.env.example`.
+The server reads `SUPABASE_URL` and `SUPABASE_ANON_KEY` (falling back to the `VITE_` names; it's the same public anon key). It refuses to start with a service-role or secret key. See `.env.example`.
 
 ## Routes
 

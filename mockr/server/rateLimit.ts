@@ -1,16 +1,15 @@
 import type { RequestHandler } from 'express';
-import { authOf } from './auth';
 import { sendProblem } from './http';
 
 export interface RateLimitOptions {
-  /** Requests allowed per window, per token (or per IP when unauthenticated). */
+  /** Requests allowed per window, per client IP. */
   max: number;
   windowMs: number;
   now?: () => number;
 }
 
 /**
- * Fixed-window, in-memory rate limit, keyed by token (or IP when there's no valid token).
+ * Fixed-window, in-memory rate limit per client IP.
  * Like X, it sends x-rate-limit-limit / -remaining / -reset (unix seconds) on every response.
  */
 export function rateLimit({ max, windowMs, now = Date.now }: RateLimitOptions): RequestHandler {
@@ -22,8 +21,7 @@ export function rateLimit({ max, windowMs, now = Date.now }: RateLimitOptions): 
       for (const [k, w] of windows) if (w.resetAt <= t) windows.delete(k);
     }
 
-    const { tokenIndex } = authOf(res);
-    const key = tokenIndex !== null ? `token:${tokenIndex}` : `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
     let w = windows.get(key);
     if (!w || w.resetAt <= t) {
       w = { used: 0, resetAt: t + windowMs };

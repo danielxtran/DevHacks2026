@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import cors from 'cors';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
-import { authOf, identify, requireToken } from './auth';
 import type { Db } from './db';
 import { HttpError, sendProblem, UpstreamError } from './http';
 import { rateLimit, type RateLimitOptions } from './rateLimit';
@@ -12,17 +11,15 @@ import { tweetRoutes } from './routes/tweets';
 
 export interface AppOptions {
   db: Db;
-  /** Valid bearer tokens (R_API_TOKENS). */
-  tokens: string[];
   /** Serve the built SPA from here after the API routes (production). */
   staticDir?: string;
   rateLimit?: Partial<RateLimitOptions>;
-  /** Express "trust proxy" setting, used to find the client IP for unauthenticated rate limiting. */
+  /** Express "trust proxy" setting, used to find the client IP for rate limiting. */
   trustProxy?: boolean | number | string;
   log?: (line: string) => void;
 }
 
-/** The developer API: /2/... (token required). /api/... is public (health). Everything else is the SPA. */
+/** The developer API: /2/... and /api/... (both public, no auth). Everything else is the SPA. */
 export const isV2Path = (p: string) => /^\/2(\/|$)/.test(p);
 export const isApiPath = (p: string) => isV2Path(p) || /^\/api(\/|$)/.test(p);
 
@@ -33,7 +30,7 @@ const only =
 
 const clean = (s: string | undefined, max = 200) => (s ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, max);
 
-/** Log path + query, with any credential-looking query param blanked (tokens belong in the header). */
+/** Log path + query, with any credential-looking query param blanked, in case a client sends one anyway. */
 function safeUrl(originalUrl: string) {
   const [p, qs] = originalUrl.split('?', 2);
   if (!qs) return clean(p, 500);
@@ -51,14 +48,12 @@ export function createApp(opts: AppOptions) {
   app.set('trust proxy', opts.trustProxy ?? 'loopback');
   app.set('query parser', 'simple');
 
-  // One line per request. Only the token's first 4 characters are ever logged.
+  // One line per request. Headers (including any Authorization a client sends) are never logged.
   app.use((req, res, next) => {
     const start = process.hrtime.bigint();
     res.on('finish', () => {
       const ms = Number(process.hrtime.bigint() - start) / 1e6;
-      const { prefix } = authOf(res);
-      const tok = prefix ? `${clean(prefix.slice(0, 4), 4)}…` : '-';
-      log(`${req.method} ${safeUrl(req.originalUrl)} ${res.statusCode} ${ms.toFixed(1)}ms token=${tok}`);
+      log(`${req.method} ${safeUrl(req.originalUrl)} ${res.statusCode} ${ms.toFixed(1)}ms ua="${clean(req.get('user-agent')) || '-'}"`);
     });
     next();
   });
@@ -70,12 +65,9 @@ export function createApp(opts: AppOptions) {
     }),
   );
 
-  // /2/*: open CORS for GET (preflight answered before auth), then identify the token,
-  // rate limit per token (or per IP without one), then reject missing or invalid tokens.
-  app.use(only(isV2Path, cors({ origin: '*', methods: ['GET', 'OPTIONS'], allowedHeaders: ['Authorization', 'Content-Type'] })));
-  app.use(only(isV2Path, identify(opts.tokens)));
+  // /2/*: public, no auth. Open CORS for GET, and a per-IP rate limit to keep one client from hogging it.
+  app.use(only(isV2Path, cors({ origin: '*', methods: ['GET', 'OPTIONS'] })));
   app.use(only(isV2Path, rateLimit({ max: 180, windowMs: 15 * 60_000, ...opts.rateLimit })));
-  app.use(only(isV2Path, requireToken));
 
   // search/recent must come before /2/tweets/:id.
   app.use(searchRoutes(opts.db));
