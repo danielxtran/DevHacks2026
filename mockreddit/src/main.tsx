@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { COMMUNITY, FEED_PATH, SITE_NAME } from './config';
 import { ToastProvider } from './lib/toast';
+import DevApi from './pages/DevApi';
 import Feed from './pages/Feed';
 import NotFound from './pages/NotFound';
 import PostDetail from './pages/PostDetail';
@@ -24,6 +25,7 @@ createRoot(document.getElementById('root')!).render(
             <Route index element={<Navigate to={FEED_PATH} replace />} />
             <Route path={FEED_PATH} element={<Feed />} />
             <Route path={`${FEED_PATH}/post/:id`} element={<PostDetail />} />
+            <Route path="/dev/api" element={<DevApi />} />
             {DebugListing && (
               <Route path="/_debug/listing" element={<Suspense fallback={null}><DebugListing /></Suspense>} />
             )}
