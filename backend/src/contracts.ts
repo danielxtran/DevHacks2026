@@ -35,13 +35,17 @@ export const FeedbackSchema = z.object({
 export type Feedback = z.infer<typeof FeedbackSchema>;
 
 const RedditCommentSchema = z.object({
-  id: z.string(), name: z.string(), parent_id: z.string(), author: z.string(), body: z.string(),
+  id: z.string().min(1), name: z.string().min(1), parent_id: z.string().min(1), author: z.string(), body: z.string(),
   score: z.number().int(), created_utc: z.number().int(),
+}).superRefine((comment, ctx) => {
+  if (comment.name !== `t1_${comment.id}`) ctx.addIssue({ code: 'custom', message: 'Comment name must match its t1_ ID.' });
 });
 const RedditPostSchema = z.object({
-  id: z.string(), name: z.string(), title: z.string(), selftext: z.string(), author: z.string(),
+  id: z.string().min(1), name: z.string().min(1), title: z.string(), selftext: z.string(), author: z.string(),
   score: z.number().int(), created_utc: z.number().int(), num_comments: z.number().int().nonnegative(),
   permalink: z.string(), subreddit: z.string(), comments: z.array(RedditCommentSchema),
+}).superRefine((post, ctx) => {
+  if (post.name !== `t3_${post.id}`) ctx.addIssue({ code: 'custom', message: 'Post name must match its t3_ ID.' });
 });
 export const RedditListingSchema = z.object({
   kind: z.literal('Listing'),
@@ -53,16 +57,26 @@ export const RedditListingSchema = z.object({
 });
 
 const TweetSchema = z.object({
-  id: z.string(), text: z.string(), author_id: z.string(), created_at: z.string().datetime({ offset: true }),
-  conversation_id: z.string(),
+  id: z.string().min(1), text: z.string(), author_id: z.string().min(1), created_at: z.string().datetime({ offset: true }),
+  conversation_id: z.string().min(1),
   public_metrics: z.object({ like_count: z.number().int(), retweet_count: z.number().int(), reply_count: z.number().int(), quote_count: z.number().int() }),
-  referenced_tweets: z.array(z.object({ type: z.literal('replied_to'), id: z.string() })),
+  referenced_tweets: z.array(z.object({ type: z.literal('replied_to'), id: z.string().min(1) })).max(1),
 });
-export const RSearchSchema = z.object({
-  data: z.array(TweetSchema),
+const RSearchPageSchema = z.object({
+  data: z.array(TweetSchema).min(1),
   includes: z.object({ users: z.array(z.object({ id: z.string(), username: z.string(), name: z.string() })) }),
-  meta: z.object({ result_count: z.number().int(), newest_id: z.string().optional(), oldest_id: z.string().optional(), next_token: z.string().optional() }),
+  meta: z.object({ result_count: z.number().int().positive(), newest_id: z.string().optional(), oldest_id: z.string().optional(), next_token: z.string().optional() }),
+}).superRefine((page, ctx) => {
+  if (page.meta.result_count !== page.data.length) {
+    ctx.addIssue({ code: 'custom', message: 'result_count must equal the number of tweets in data.' });
+  }
 });
+const RSearchEmptySchema = z.object({
+  meta: z.object({ result_count: z.literal(0) }).strict(),
+}).strict();
+export const RSearchSchema = z.union([RSearchPageSchema, RSearchEmptySchema]);
+export type RTweet = z.infer<typeof TweetSchema>;
+export type RSearchPage = z.infer<typeof RSearchSchema>;
 
 export const StartRunRequestSchema = z.object({ idempotencyKey: z.string().trim().min(1).max(200) }).strict();
 export const HumanDecisionSchema = z.object({

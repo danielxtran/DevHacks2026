@@ -14,9 +14,26 @@ Run this app:
 
 ```bash
 npm install
-npm run dev      # http://localhost:5175
-npm run build    # type-check + production build
+npm run dev      # web on http://localhost:5175 + API server on :4175 (/2 and /api proxied through 5175)
+npm run dev:web  # web only
+npm run dev:api  # API server only
+npm test         # API tests (Supabase mocked)
+npm run build    # type-check web + server, production build
+npm start        # production: one process serves the API and dist/ on $PORT (default 4175)
 ```
+
+## Developer API (X API v2-shaped)
+
+`server/` is a small Express app. The API is public, with no auth. The agent pipeline reads R **only through these endpoints**, using nothing but R's URL:
+
+- `/2/tweets/search/recent` (`query` supports text, `#tag`, `*`, `conversation_id:<id>` and `from:<user>`)
+- `/2/tweets/:id`
+- `/2/tweets?ids=`
+- `/api/health`
+
+Full docs, field mapping and a reference `fetchAllR()` are in [API.md](API.md). The same docs, with a "Try it" console, are in the app at `/developers`.
+
+The server reads `SUPABASE_URL` and `SUPABASE_ANON_KEY` (falling back to the `VITE_` names; it's the same public anon key). It refuses to start with a service-role or secret key. See `.env.example`.
 
 ## Routes
 
@@ -26,6 +43,7 @@ npm run build    # type-check + production build
 | `/post/:id` | Post with its parent chain, reply composer and direct replies |
 | `/u/:username` | Profile: Posts / Replies tabs |
 | `/search?q=` | Search (`#tags` work) |
+| `/developers` | Developer portal for the `/2` API, with a "Try it" console |
 | `/_debug/search` | **Dev only.** Raw JSON from `search_recent`, with paging: exactly what the pipeline receives |
 
 ## Backend API (RPCs in the `mockr` schema)

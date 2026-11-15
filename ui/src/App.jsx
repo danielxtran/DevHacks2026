@@ -96,6 +96,7 @@ function TopBar() {
 
 export default function App() {
   const { pathname } = useLocation()
+  const { loadState } = usePipeline()
   return (
     <div className="min-h-full">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-accent focus:px-3 focus:py-2">
@@ -103,8 +104,18 @@ export default function App() {
       </a>
       <TopBar />
       <main id="main" className="mx-auto max-w-6xl px-6 pb-24 pt-10">
-        <ErrorBoundary key={pathname}>
-          <Routes>
+        {loadState === 'loading' ? (
+          <StateView kind="loading" title="Loading issues from Supabase…" />
+        ) : (
+          <ErrorBoundary key={pathname}>
+            {loadState === 'error' && (
+              <div className="mb-6">
+                <StateView kind="error" title="Couldn’t reach Supabase">
+                  Showing the last local snapshot. Check your connection and refresh.
+                </StateView>
+              </div>
+            )}
+            <Routes>
             <Route path="/" element={<Board />} />
             <Route path="/list" element={<List />} />
             {/* Old address for the List tab */}
@@ -116,8 +127,9 @@ export default function App() {
               <Route path="verified" element={<PlaytestResults view="verified" />} />
             </Route>
             <Route path="*" element={<StateView kind="empty" title="Page not found" action={<Button to="/">Back to board</Button>} />} />
-          </Routes>
-        </ErrorBoundary>
+            </Routes>
+          </ErrorBoundary>
+        )}
       </main>
     </div>
   )

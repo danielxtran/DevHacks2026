@@ -13,6 +13,16 @@ function loopbackHost(value: string | undefined): string {
   return host;
 }
 
+function sourceBaseUrl(value: string | undefined, fallback: string, name: string): string {
+  const configured = value ?? fallback;
+  let url: URL;
+  try { url = new URL(configured); } catch { throw new Error(`${name} must be a valid HTTP(S) URL.`); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new Error(`${name} must use HTTP(S) and must not contain credentials.`);
+  }
+  return configured;
+}
+
 function scenarios(value: string | undefined) {
   if (!value) return [];
   let parsed: unknown;
@@ -23,18 +33,15 @@ function scenarios(value: string | undefined) {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const databaseUrl = env.SUPABASE_DB_URL ?? env.DATABASE_URL;
-  const supabaseUrl = env.SUPABASE_URL ?? env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = env.SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY;
   if (!databaseUrl) throw new Error('SUPABASE_DB_URL is required for backend-only workflow writes.');
-  if (!supabaseUrl || !supabaseAnonKey) throw new Error('VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required for source RPC access.');
   return {
     host: loopbackHost(env.API_HOST),
     port: int(env.API_PORT, 3001, 1, 65535),
     databaseUrl,
-    supabaseUrl,
-    supabaseAnonKey,
-    anthropicApiKey: env.ANTHROPIC_API_KEY,
-    anthropicModel: env.ANTHROPIC_MODEL,
+    riotditBaseUrl: sourceBaseUrl(env.RIOTDIT_BASE_URL, 'http://127.0.0.1:5174', 'RIOTDIT_BASE_URL'),
+    rBaseUrl: sourceBaseUrl(env.R_BASE_URL, 'http://127.0.0.1:5175', 'R_BASE_URL'),
+    openaiApiKey: env.OPENAI_API_KEY,
+    openaiModel: env.OPENAI_MODEL,
     baselineRevision: env.BASELINE_REVISION,
     scenarios: scenarios(env.SCENARIO_MANIFEST),
     artifactDir: resolve(env.ARTIFACT_DIR ?? '.artifacts'),

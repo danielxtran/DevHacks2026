@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { FeedbackSchema } from './contracts.js';
+import { FeedbackSchema, RSearchSchema } from './contracts.js';
 
 const redditRoot = {
   id: 'mr_s001', external_id: 't3_s001', source: 'reddit', fixture_set: 'mock-live', kind: 'post',
@@ -15,6 +15,12 @@ test('normalized root feedback preserves source identity and accepts null titles
     ...redditRoot, id: 'r_123', external_id: '123', source: 'r', title: null,
     source_url: 'http://127.0.0.1:5175/post/123', num_comments: 2,
   }).id, 'r_123');
+});
+
+test('R search accepts only the documented empty shape or a valid nonempty page', () => {
+  assert.deepEqual(RSearchSchema.parse({ meta: { result_count: 0 } }), { meta: { result_count: 0 } });
+  assert.equal(RSearchSchema.safeParse({ data: [], includes: { users: [] }, meta: { result_count: 0 } }).success, false);
+  assert.equal(RSearchSchema.safeParse({ meta: { result_count: 1 } }).success, false);
 });
 
 test('normalized comments require parent and thread context', () => {

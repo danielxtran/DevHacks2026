@@ -5,7 +5,7 @@ import { supabase, supabaseConfigured } from '../lib/supabase';
 import { topHashtags } from '../lib/text';
 import { Composer } from './Composer';
 import { ErrorBanner } from './ui';
-import { HomeIcon, PenIcon, SearchIcon } from './Icons';
+import { CodeIcon, HomeIcon, PenIcon, SearchIcon } from './Icons';
 import { Logo } from './Logo';
 
 /** Lets any page open the "Post" composer modal. */
@@ -33,6 +33,9 @@ export function Layout() {
           <NavLink to="/search" className={navItem}>
             <SearchIcon /><span className="hidden xl:inline">Search</span>
           </NavLink>
+          <NavLink to="/developers" className={navItem}>
+            <CodeIcon /><span className="hidden xl:inline">Developers</span>
+          </NavLink>
           <button
             type="button"
             onClick={open}
@@ -58,6 +61,7 @@ export function Layout() {
       <nav className="fixed inset-x-0 bottom-0 z-30 flex justify-around border-t border-slate-200 bg-white py-1 sm:hidden" aria-label="Main">
         <NavLink to="/" end className="rounded-full p-3" aria-label="Home">{({ isActive }) => <HomeIcon filled={isActive} />}</NavLink>
         <NavLink to="/search" className="rounded-full p-3" aria-label="Search"><SearchIcon /></NavLink>
+        <NavLink to="/developers" className="rounded-full p-3" aria-label="Developers"><CodeIcon /></NavLink>
         <button type="button" onClick={open} aria-label="Post" className="rounded-full p-3 text-accent"><PenIcon /></button>
       </nav>
 
