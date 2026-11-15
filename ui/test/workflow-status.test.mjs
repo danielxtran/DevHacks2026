@@ -13,7 +13,8 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
     vite.ssrLoadModule('/src/store/context.js'),
   ])
   const render = (mode, { phase = 'spec_queued', error = null, jobs = [], versions = [], simulations = [], decision = null } = {}) => {
-    const run = { id: 'run-1', lifecycle_phase: phase, status: error ? 'failed' : 'queued', error }
+    const run = { id: 'run-1', lifecycle_phase: phase, status: error ? 'failed' : 'queued', error,
+      simulation_generation: 1, approved_spec_version_id: 'spec-1' }
     const issue = { id: 'issue-1', runs: [{ id: run.id }], backendRun: { id: run.id } }
     const state = { workflow: { run, jobs, versions, simulations, decision }, capabilities: {} }
     return renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/issues/issue-1'] },
@@ -22,7 +23,7 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
           h(Route, { index: true, element: h(WorkflowPage, { mode }) }))))))
   }
   const savedSpec = { id: 'spec-1', current: true, approved: true, version_number: 1, markdown: 'Saved spec', numeric_patch: [] }
-  const simulation = { id: 'simulation-1', battles: 1000, seed: 42 }
+  const simulation = { id: 'simulation-1', battles: 1000, seed: 42, generation: 1, spec_version_id: 'spec-1' }
 
   await t.test('queued and running specifications have distinct, non-error copy', () => {
     const queued = render('spec', { jobs: [{ kind: 'spec_initial', state: 'queued' }] })
@@ -32,19 +33,19 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
     for (const kind of ['spec_initial', 'spec_revision']) {
       const running = render('spec', { jobs: [{ kind, state: 'running' }] })
       assert.match(running, /Writing specification/)
-      assert.match(running, /Testing starts only after you review and approve/)
+      assert.match(running, /Simulation starts only after you review and approve/)
       assert.doesNotMatch(running, /role="alert"|Waiting for the Spec Writer to start/)
     }
   })
 
-  await t.test('a spec failure appears once in Development, not as a Testing error', () => {
+  await t.test('a spec failure appears once in Development, not as a Results error', () => {
     const bundle = { phase: 'spec_failed', error: 'Model timed out' }
     const development = render('spec', bundle)
     assert.match(development, /Specification could not be generated/)
     assert.equal(development.match(/Model timed out/g)?.length, 1)
     assert.equal(development.match(/role="alert"/g)?.length, 1)
-    const testing = render('playtest', bundle)
-    assert.match(testing, /Testing has not started/)
+    const testing = render('results', bundle)
+    assert.match(testing, /No simulation results yet/)
     assert.match(testing, /Review and approve the specification in Development/)
     assert.doesNotMatch(testing, /Model timed out|role="alert"|Specification failed/)
   })
@@ -60,18 +61,18 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
       error: 'Previous model error', jobs: [{ kind: 'spec_initial', state: 'queued', error: 'Previous job error' }],
     })
     assert.doesNotMatch(development, /Previous model error|Previous job error|role="alert"/)
-    const testing = render('playtest', {
+    const testing = render('results', {
       phase: 'simulation_queued', error: 'Previous simulation error', simulations: [{ ...simulation, state: 'queued' }],
     })
     assert.doesNotMatch(testing, /Previous simulation error|role="alert"/)
   })
 
   await t.test('simulation queueing and execution describe what is actually happening', () => {
-    const queued = render('playtest', { phase: 'simulation_queued', simulations: [{ ...simulation, state: 'queued' }] })
+    const queued = render('results', { phase: 'simulation_queued', simulations: [{ ...simulation, state: 'queued' }] })
     assert.match(queued, /Simulation queued/)
     assert.match(queued, /Waiting for Hexlab to start. It will compare/)
     assert.doesNotMatch(queued, /Comparing 1,000|role="alert"/)
-    const running = render('playtest', { phase: 'simulation_queued', simulations: [{ ...simulation, state: 'running' }] })
+    const running = render('results', { phase: 'simulation_queued', simulations: [{ ...simulation, state: 'running' }] })
     assert.match(running, /Running Hexlab comparison/)
     assert.match(running, /Comparing 1,000 paired battles/)
     assert.doesNotMatch(running, /Waiting for Hexlab|role="alert"/)
@@ -82,7 +83,7 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
       phase: 'failed', error: 'Hexlab unavailable', versions: [savedSpec],
       simulations: [{ ...simulation, state: 'failed', error: 'Hexlab unavailable' }],
     }
-    const testing = render('playtest', bundle)
+    const testing = render('results', bundle)
     assert.equal(testing.match(/Hexlab unavailable/g)?.length, 1)
     assert.match(testing, /role="alert"[^>]*>Simulation failed: Hexlab unavailable/)
     const development = render('spec', bundle)
@@ -91,7 +92,7 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
   })
 
   await t.test('a simulation failure without a saved request still exposes its error', () => {
-    const html = render('playtest', { phase: 'failed', error: 'Simulation job interrupted' })
+    const html = render('results', { phase: 'failed', error: 'Simulation job interrupted' })
     assert.match(html, /Simulation could not complete/)
     assert.match(html, /Simulation job interrupted/)
     assert.equal(html.match(/role="alert"/g)?.length, 1)
@@ -110,11 +111,27 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
       differences: { champions: { yasuo: { winRate: 0, averageDamageDealt: 0, averageDamageTaken: 0, averageSurvivalDuration: 0 } }, items: {} },
       evaluationDurationMs: 25, methodology: 'Paired seeded battles.',
     }
-    const html = render('verified', {
-      phase: 'accepted', decision: { decision: 'accept', reviewer: 'You' }, versions: [savedSpec],
+    const bundle = {
+      versions: [savedSpec],
       simulations: [{ ...simulation, state: 'succeeded', baseline_config_id: baselineConfigId, engine_id: engineId,
         numeric_patch: numericPatch, mode: 'pvp', baseline_config: { champions: { yasuo: { name: 'Yasuo', attackDamage: 25 } } }, result }],
-    })
+    }
+    const awaitingReview = render('results', { ...bundle, phase: 'simulation_review' })
+    assert.match(awaitingReview, /Mark verified/)
+    assert.match(awaitingReview, /Reject experiment/)
+    for (const closed of [
+      { phase: 'accepted', decision: { decision: 'accept', reviewer: 'You' } },
+      { phase: 'accepted' },
+      { phase: 'experiment_rejected', decision: { decision: 'reject', reviewer: 'You' } },
+      { phase: 'simulation_review', decision: { decision: 'accept', reviewer: 'You' } },
+    ]) {
+      const readOnly = render('results', { ...bundle, ...closed })
+      assert.match(readOnly, /Results/)
+      assert.match(readOnly, /Accepted|Rejected experiment/)
+      assert.match(readOnly, /Measured simulation results/)
+      assert.doesNotMatch(readOnly, /Mark verified|Reject experiment|Return to Development|Re-run/)
+    }
+    const html = render('results', { ...bundle, phase: 'accepted', decision: { decision: 'accept', reviewer: 'You' } })
     assert.match(html, /Measured simulation results/)
     assert.match(html, /Champion performance/)
     assert.match(html, /Accepted/)
@@ -126,7 +143,7 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
       phase: 'spec_failed', error: 'Current spec error',
       simulations: [{ ...simulation, state: 'interrupted', error: 'Earlier simulation error' }],
     }
-    const testing = render('playtest', bundle)
+    const testing = render('results', bundle)
     assert.match(testing, /Simulation interrupted: Earlier simulation error/)
     assert.doesNotMatch(testing, /Current spec error/)
     const development = render('spec', bundle)

@@ -147,7 +147,8 @@ function SpecView({ issue, bundle, search, setSearch, command }) {
     if (result?.simulationId) {
       const next = new URLSearchParams(search)
       next.set('simulation', result.simulationId)
-      navigate(`/issues/${issue.id}/playtest?${next}`)
+      next.set('run', run.id)
+      navigate(`/issues/${issue.id}/results?${next}`)
     }
   }
   const reject = event => {
@@ -162,7 +163,7 @@ function SpecView({ issue, bundle, search, setSearch, command }) {
     <div className="space-y-8">
       <RunHistory issue={issue} run={run} setSearch={setSearch} />
       <Section title="Development" right={<span className="text-sm text-muted">{specStatus}</span>}>
-        <p className="text-sm text-muted">Review the specification and numeric patch, then approve them to start a Hexlab comparison in Testing.</p>
+        <p className="text-sm text-muted">Review the specification and numeric patch, then approve them to view a Hexlab comparison in Results.</p>
         {specFailed && versions.length > 0 && <p role="alert" className="mt-3 text-sm text-warning">Specification could not be generated: {run.error ?? 'No additional details.'} Your saved version is still available below.</p>}
         {run.lifecycle_phase === 'spec_failed' && <div className="mt-3">
           <Button disabled={busy || !capabilities.retrySpec?.enabled} onClick={() => void send('retry-spec', `/runs/${run.id}/spec-retry`, 'POST', {
@@ -216,7 +217,7 @@ function SpecView({ issue, bundle, search, setSearch, command }) {
                 <label className="text-sm text-muted">Mode<select className={field} value={mode} onChange={event => setMode(event.target.value)}><option value="pvp">PvP</option><option value="pve">PvE</option></select></label>
                 <label className="text-sm text-muted">Battles<select className={field} value={battles} onChange={event => setBattles(Number(event.target.value))}>{[100, 1000, 5000, 10000].map(value => <option key={value} value={value}>{value.toLocaleString()}</option>)}</select></label>
                 <label className="text-sm text-muted">Seed<input className={field} type="number" min="0" max="4294967295" value={seed} onChange={event => setSeed(event.target.value)} /></label>
-                <div className="flex items-end"><Button type="submit" variant="primary" disabled={busy || !editable || !capabilities.approveSpec?.enabled || !current?.numeric_patch?.length}>Approve patch & send to Testing</Button></div>
+                <div className="flex items-end"><Button type="submit" variant="primary" disabled={busy || !editable || !capabilities.approveSpec?.enabled || !current?.numeric_patch?.length}>Approve patch & run simulation</Button></div>
               </form>
               {!current?.numeric_patch?.length && <p className="mt-2 text-xs text-warning">A supported numeric patch is required before approval.</p>}
               {!editable && <p className="mt-2 text-xs text-muted">Select the current spec version to approve its exact patch.</p>}
@@ -233,8 +234,8 @@ function SpecView({ issue, bundle, search, setSearch, command }) {
         >
           {specFailed ? run.error ?? 'Retry development to try generating the specification again.'
             : specPending ? job?.state === 'running'
-              ? 'The Spec Writer is preparing the specification and numeric patch. Testing starts only after you review and approve them.'
-              : 'Waiting for the Spec Writer to start. Testing has not started.'
+              ? 'The Spec Writer is preparing the specification and numeric patch. Simulation starts only after you review and approve them.'
+              : 'Waiting for the Spec Writer to start. Simulation has not started.'
             : 'There is no saved specification for this experiment.'}
         </StateView>}
       </Section>
@@ -253,7 +254,7 @@ function asPlaytest(simulation) {
   }
 }
 
-function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode }) {
+function ResultsView({ issue, bundle, search, setSearch, command }) {
   const run = bundle?.run
   const navigate = useNavigate()
   const simulations = bundle?.simulations ?? []
@@ -266,6 +267,7 @@ function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode
   const keys = useRef({})
   const selected = simulations.find(item => item.id === search.get('simulation')) ?? simulations.at(-1)
   const decision = bundle?.decision
+  const finalized = Boolean(decision) || ['accepted', 'experiment_rejected', 'spec_rejected'].includes(run?.lifecycle_phase)
   const reviewable = selected?.state === 'succeeded'
     && Number(selected.generation) === Number(run?.simulation_generation)
     && selected.spec_version_id === run?.approved_spec_version_id
@@ -312,14 +314,15 @@ function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode
   if (!run) return <StateView kind="empty" title="No experiment selected" action={<Link className="underline" to={`/issues/${issue.id}/spec`}>Open Development</Link>} />
 
   const completed = simulations.filter(item => item.state === 'succeeded')
-  const testingStatus = selected ? simulationStates[selected.state] ?? selected.state
+  const simulationStatus = selected ? simulationStates[selected.state] ?? selected.state
     : run.lifecycle_phase === 'simulation_queued' ? phases.simulation_queued
       : run.lifecycle_phase === 'failed' ? phases.failed : 'Not started'
-  const finalStatus = decision ? decision.decision === 'accept' ? 'Accepted' : 'Rejected experiment' : 'No final decision'
+  const resultsStatus = decision ? decision.decision === 'accept' ? 'Accepted' : 'Rejected experiment'
+    : finalized ? phases[run.lifecycle_phase] : simulationStatus
   return (
     <div className="space-y-8">
       <RunHistory issue={issue} run={run} setSearch={setSearch} />
-      <Section title={viewMode === 'verified' ? 'Final review' : 'Testing'} right={<span className="text-sm text-muted">{viewMode === 'verified' ? finalStatus : testingStatus}</span>}>
+      <Section title="Results" right={<span className="text-sm text-muted">{resultsStatus}</span>}>
         {simulations.length > 0 && <label className="mb-5 flex flex-wrap items-center gap-3 text-sm text-muted">Saved simulation
           <select className="select-pill" value={selected?.id ?? ''} onChange={event => setSimulation(event.target.value)}>
             {simulations.map(item => <option key={item.id} value={item.id}>{simulationStates[item.state] ?? item.state} · {Number(item.battles).toLocaleString()} battles · {stampId(item.created_at)}</option>)}
@@ -327,7 +330,7 @@ function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode
         </label>}
         {!selected && <StateView
           kind={run.lifecycle_phase === 'failed' ? 'error' : run.lifecycle_phase === 'simulation_queued' ? 'loading' : 'empty'}
-          title={run.lifecycle_phase === 'failed' ? 'Simulation could not complete' : run.lifecycle_phase === 'simulation_queued' ? 'Simulation queued' : 'Testing has not started'}
+          title={run.lifecycle_phase === 'failed' ? 'Simulation could not complete' : run.lifecycle_phase === 'simulation_queued' ? 'Simulation queued' : 'No simulation results yet'}
         >
           {run.lifecycle_phase === 'failed' ? run.error ?? 'Return to Development to review the patch before trying again.'
             : run.lifecycle_phase === 'simulation_queued' ? 'The approved comparison is waiting for Hexlab to start.'
@@ -336,21 +339,20 @@ function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode
         {selected?.state === 'queued' || selected?.state === 'running' ? <StateView kind="loading" title={simulationStates[selected.state]}>{selected.state === 'queued' ? 'Waiting for Hexlab to start. It will compare' : 'Comparing'} {Number(selected.battles).toLocaleString()} paired battles per configuration with seed {selected.seed}.</StateView> : null}
         {selected?.state === 'failed' || selected?.state === 'interrupted' ? <p role="alert" className="text-sm text-warning">{simulationStates[selected.state]}: {selected.error ?? 'No additional details.'}</p> : null}
         {selected?.state === 'succeeded' && <SimulationResults playtest={asPlaytest({ ...selected, version_number: bundle.versions?.find(version => version.id === selected.spec_version_id)?.version_number })} />}
-        {viewMode !== 'verified' && ['simulation_review', 'failed'].includes(run.lifecycle_phase) && <form className="flex flex-wrap items-end gap-3 border-t border-border pt-5" onSubmit={rerun}>
+        {!finalized && ['simulation_review', 'failed'].includes(run.lifecycle_phase) && <form className="flex flex-wrap items-end gap-3 border-t border-border pt-5" onSubmit={rerun}>
           <label className="text-sm text-muted">Rerun with more battles<select className={field} value={battles} onChange={event => setBattles(Number(event.target.value))}>{[100, 1000, 5000, 10000].map(value => <option key={value} value={value}>{value.toLocaleString()}</option>)}</select></label>
           <Button type="submit" disabled={busy || !run.capabilities?.simulation?.enabled}>Re-run</Button>
         </form>}
-        {viewMode !== 'verified' && run.lifecycle_phase === 'simulation_review' && reviewable && !decision && <div className="space-y-3 border-t border-border pt-5">
+        {!finalized && run.lifecycle_phase === 'simulation_review' && reviewable && <div className="space-y-3 border-t border-border pt-5">
           <label className="block text-sm text-muted">Review comment<textarea className={`${field} min-h-20`} maxLength={5000} value={comment} onChange={event => setComment(event.target.value)} placeholder="What did you conclude from the measurements?" /></label>
-          <div className="flex flex-wrap gap-3"><Button variant="primary" disabled={busy} onClick={() => void decide('accept').then(result => { if (result) navigate(`/issues/${issue.id}/verified?run=${encodeURIComponent(run.id)}`) })}>Mark verified</Button><Button variant="danger" disabled={busy} onClick={() => void decide('reject').then(result => { if (result) navigate(`/issues/${issue.id}/verified?run=${encodeURIComponent(run.id)}`) })}>Reject experiment</Button></div>
+          <div className="flex flex-wrap gap-3"><Button variant="primary" disabled={busy} onClick={() => void decide('accept')}>Mark verified</Button><Button variant="danger" disabled={busy} onClick={() => void decide('reject')}>Reject experiment</Button></div>
         </div>}
-        {viewMode !== 'verified' && selected?.state === 'succeeded' && !reviewable && !decision && <p className="text-sm text-muted">This is a retained historical result. Final review is only available for the latest approved simulation.</p>}
-        {viewMode !== 'verified' && !decision && !['accepted', 'experiment_rejected'].includes(run.lifecycle_phase) && <form className="flex flex-wrap items-end gap-3 border-t border-border pt-5" onSubmit={back}>
+        {!finalized && selected?.state === 'succeeded' && !reviewable && <p className="text-sm text-muted">This is a retained historical result. Final review is only available for the latest approved simulation.</p>}
+        {!finalized && <form className="flex flex-wrap items-end gap-3 border-t border-border pt-5" onSubmit={back}>
           <label className="min-w-64 flex-1 text-sm text-muted">Back to Development reason<input className={field} maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} placeholder="Why should this experiment be revised?" /></label>
           <Button type="submit" variant="danger" disabled={busy || !reason.trim()}>Return to Development</Button>
         </form>}
         {selected?.state === 'failed' && <p className="text-xs text-muted">Retry is not wired in this pass; the failed request remains in history.</p>}
-        {viewMode === 'verified' && !decision && <p className="text-sm text-muted">This experiment has no saved final decision.</p>}
         {completed.length > 1 && <p className="text-xs text-muted">{completed.length} successful simulation runs are retained in experiment history.</p>}
       </Section>
       <CommandStatus busy={busy} error={error} message={message} />
@@ -373,5 +375,5 @@ export default function WorkflowPage({ mode }) {
   if (search.get('run') && run && !selectedRunExists) return <StateView kind="error" title="Experiment does not belong to this issue" action={<Link className="underline" to={`/issues/${issue.id}`}>Back to issue</Link>} />
   if (!run && (issue.backendRun || runHistory.length)) return <StateView kind="loading" title="Loading saved experiment…" />
   if (mode === 'spec') return <SpecView issue={issue} bundle={workflow} search={search} setSearch={setSearch} command={command} />
-  return <TestingView issue={issue} bundle={workflow} search={search} setSearch={setSearch} command={command} mode={mode} />
+  return <ResultsView issue={issue} bundle={workflow} search={search} setSearch={setSearch} command={command} />
 }

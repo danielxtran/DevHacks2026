@@ -7,8 +7,7 @@ import { num } from '../components/format'
 const steps = [
   ['feedback', 'Issues', ''],
   ['spec', 'Development', '/spec'],
-  ['playtest', 'Testing', '/playtest'],
-  ['verified', 'Closed', '/verified'],
+  ['results', 'Results', '/results'],
 ]
 
 export default function IssueLayout() {
@@ -24,7 +23,8 @@ export default function IssueLayout() {
   const query = new URLSearchParams(search)
   if (selectedRunId) query.set('run', selectedRunId)
   const runQuery = query.size ? `?${query}` : ''
-  const current = steps.findIndex(([stage]) => stage === issue.stage)
+  const currentStage = ['playtest', 'verified'].includes(issue.stage) ? 'results' : issue.stage
+  const current = steps.findIndex(([stage]) => stage === currentStage)
 
   return (
     <div>

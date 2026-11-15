@@ -93,7 +93,7 @@ function TopBar() {
 }
 
 export default function App() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const { loadState, lastUpdated, error, refresh } = usePipeline()
   return (
     <div className="min-h-full">
@@ -122,8 +122,9 @@ export default function App() {
             <Route path="/issues/:id" element={<IssueLayout />}>
               <Route index element={<IssueDetail />} />
               <Route path="spec" element={<WorkflowPage mode="spec" />} />
-              <Route path="playtest" element={<WorkflowPage mode="playtest" />} />
-              <Route path="verified" element={<WorkflowPage mode="verified" />} />
+              <Route path="results" element={<WorkflowPage mode="results" />} />
+              <Route path="playtest" element={<Navigate to={`../results${search}`} replace />} />
+              <Route path="verified" element={<Navigate to={`../results${search}`} replace />} />
             </Route>
             <Route path="*" element={<StateView kind="empty" title="Page not found" action={<Button to="/">Back to board</Button>} />} />
             </Routes>}
