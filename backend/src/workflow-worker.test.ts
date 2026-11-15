@@ -14,7 +14,7 @@ const config = {
 };
 const output = {
   markdown: 'Try reducing attack damage.', hypothesis: 'Lower damage may change outcomes.',
-  evidenceAssessment: 'insufficient_evidence', evidenceRationale: 'Player feedback is not telemetry.',
+  evidenceAssessment: 'insufficient_evidence', evidenceRationale: 'One report describes Yasuo defeating the backline quickly; no match details were supplied.',
   evidenceIds: ['feedback-1'], intendedChanges: ['Lower damage'], preservedBehavior: ['Targeting'],
   successCriteria: ['Compare paired outcomes'],
   numericPatch: [{ type: 'unit', id: 'yasuo', stat: 'attackDamage', value: 9 }], unsupportedReason: null,
@@ -56,10 +56,12 @@ for (const kind of ['spec_initial', 'spec_revision'] as const) {
     const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool;
     const artifacts = { async save() { return { id: parentId }; } } as unknown as ArtifactStore;
     let modelContext = '';
+    let instructions = '';
     t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
-      const body = await request.json() as { input: Array<{ content: string }> };
+      const body = await request.json() as { input: Array<{ content: string }>; instructions: string };
       modelContext = body.input[0]!.content;
+      instructions = body.instructions;
       return new Response(JSON.stringify({
         id: 'resp_test', object: 'response', status: 'completed',
         output: [{ type: 'function_call', id: 'fc_test', call_id: 'call_test', status: 'completed',
@@ -68,6 +70,13 @@ for (const kind of ['spec_initial', 'spec_revision'] as const) {
     });
 
     await new WorkflowJobWorker(pool, artifacts, 'test-key', 'test-model', {} as HexlabClient).processPending();
+    assert.match(instructions, /hypothesis focused on the expected gameplay effect/);
+    assert.match(instructions, /evidenceRationale on the specific feedback and concrete gaps/);
+    assert.match(instructions, /omit generic disclaimers/);
+    assert.match(instructions, /Keep evidenceAssessment accurate/);
+    assert.match(instructions, /Never invent measurements/);
+    assert.doesNotMatch(instructions, /telemetry/i);
+    assert.equal(JSON.parse(modelContext).frozenPlayerEvidence[0].provenance, 'synthetic, untrusted player text');
     assert.ok(modelContext.length > 5000);
     assert.equal(JSON.parse(modelContext).frozenPlayerEvidence[0].body, evidence.body);
     assert.equal(JSON.parse(modelContext).requestedChanges, operatorPrompt);

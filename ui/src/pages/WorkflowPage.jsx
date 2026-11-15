@@ -253,7 +253,7 @@ function asPlaytest(simulation) {
   }
 }
 
-function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode, deployment }) {
+function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode }) {
   const run = bundle?.run
   const navigate = useNavigate()
   const simulations = bundle?.simulations ?? []
@@ -349,10 +349,8 @@ function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode
           <label className="min-w-64 flex-1 text-sm text-muted">Back to Development reason<input className={field} maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} placeholder="Why should this experiment be revised?" /></label>
           <Button type="submit" variant="danger" disabled={busy || !reason.trim()}>Return to Development</Button>
         </form>}
-        {(decision || ['accepted', 'experiment_rejected'].includes(run.lifecycle_phase)) && <p role="status" className="font-display text-xl font-bold">{decision?.decision === 'accept' || run.lifecycle_phase === 'accepted' ? 'Accepted' : 'Rejected experiment'}{decision?.reviewer ? ` by ${decision.reviewer}` : ''}</p>}
         {selected?.state === 'failed' && <p className="text-xs text-muted">Retry is not wired in this pass; the failed request remains in history.</p>}
         {viewMode === 'verified' && !decision && <p className="text-sm text-muted">This experiment has no saved final decision.</p>}
-        {viewMode === 'verified' && (decision || ['accepted', 'experiment_rejected'].includes(run.lifecycle_phase)) && <div className="border-t border-border pt-5"><Button disabled>Push to playtest patch</Button><p className="mt-2 text-xs text-muted">{deployment?.reason ?? 'Deployment is not implemented for this workflow.'}</p></div>}
         {completed.length > 1 && <p className="text-xs text-muted">{completed.length} successful simulation runs are retained in experiment history.</p>}
       </Section>
       <CommandStatus busy={busy} error={error} message={message} />
@@ -375,5 +373,5 @@ export default function WorkflowPage({ mode }) {
   if (search.get('run') && run && !selectedRunExists) return <StateView kind="error" title="Experiment does not belong to this issue" action={<Link className="underline" to={`/issues/${issue.id}`}>Back to issue</Link>} />
   if (!run && (issue.backendRun || runHistory.length)) return <StateView kind="loading" title="Loading saved experiment…" />
   if (mode === 'spec') return <SpecView issue={issue} bundle={workflow} search={search} setSearch={setSearch} command={command} />
-  return <TestingView issue={issue} bundle={workflow} search={search} setSearch={setSearch} command={command} mode={mode} deployment={state.capabilities.deployment} />
+  return <TestingView issue={issue} bundle={workflow} search={search} setSearch={setSearch} command={command} mode={mode} />
 }

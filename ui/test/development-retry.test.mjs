@@ -34,6 +34,7 @@ test('failed development shows retry controls on the issue and Development scree
   for (const page of [h(IssueDetail), h(WorkflowPage, { mode: 'spec' })]) {
     const html = render(page)
     assert.match(html, /<button\b[^>]*>Retry development<\/button>/)
+    assert.doesNotMatch(html, /gameplay telemetry/i)
     assert.doesNotMatch(html, /<button\b[^>]*\sdisabled(?=[\s=>])[^>]*>Retry development<\/button>/)
   }
   run.capabilities.retrySpec = { enabled: false, reason: 'The Spec Writer reached its three-attempt limit.' }

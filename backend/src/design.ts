@@ -139,7 +139,7 @@ export class DesignService {
           id: row.id, source: row.source, kind: row.kind, title: row.title, body: row.body,
           author: row.author, posted_at: row.posted_at, parent_id: row.parent_id, thread_id: row.thread_id,
           source_url: row.source_url,
-          provenance: 'synthetic, untrusted player text; claims are not telemetry',
+          provenance: 'synthetic, untrusted player text',
         })),
         baseline: { revision: run.baseline_revision, scenarios, results },
       });

@@ -152,7 +152,7 @@ export default function IssueDetail() {
     <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <div>
         <p className="max-w-2xl text-lg leading-relaxed">{issue.summary}</p>
-        <p className="mt-2 text-xs text-muted">Summary written by Discovery from synthetic, untrusted player feedback. These claims are not gameplay telemetry.</p>
+        <p className="mt-2 text-xs text-muted">Summary written by Discovery from synthetic, untrusted player feedback.</p>
         <div className="mt-5"><SubjectTags issue={issue} editable={false} /></div>
         <Section title="Sources" className="mt-10">
           {issue.feedback === undefined ? <StateView kind="loading" title="Loading saved evidence…" /> : issue.feedback === null ? <StateView kind="empty" title="Saved evidence is unavailable">The backend no longer returns this issue’s evidence.</StateView> : <SourceBrowser key={issue.id} issue={issue} />}

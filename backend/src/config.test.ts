@@ -11,6 +11,7 @@ test('source HTTP defaults need no Supabase URL or anon key', () => {
   assert.equal(config.openaiApiKey, 'test-openai-key');
   assert.equal(config.openaiModel, 'test-model');
   assert.equal(config.databaseUrl, database);
+  assert.equal(config.maxCollectedItems, 2000);
 });
 
 test('source HTTP base URLs can be overridden and validated', () => {

@@ -12,10 +12,10 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
     vite.ssrLoadModule('/src/pages/WorkflowPage.jsx'),
     vite.ssrLoadModule('/src/store/context.js'),
   ])
-  const render = (mode, { phase = 'spec_queued', error = null, jobs = [], versions = [], simulations = [] } = {}) => {
+  const render = (mode, { phase = 'spec_queued', error = null, jobs = [], versions = [], simulations = [], decision = null } = {}) => {
     const run = { id: 'run-1', lifecycle_phase: phase, status: error ? 'failed' : 'queued', error }
     const issue = { id: 'issue-1', runs: [{ id: run.id }], backendRun: { id: run.id } }
-    const state = { workflow: { run, jobs, versions, simulations }, capabilities: {} }
+    const state = { workflow: { run, jobs, versions, simulations, decision }, capabilities: {} }
     return renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/issues/issue-1'] },
       h(PipelineContext.Provider, { value: { state, command: () => { throw new Error('Rendering must not send commands') } } },
         h(Routes, null, h(Route, { path: '/issues/:id', element: h(Outlet, { context: { issue } }) },
@@ -95,6 +95,30 @@ test('workflow copy and errors belong to the stage being viewed', async t => {
     assert.match(html, /Simulation could not complete/)
     assert.match(html, /Simulation job interrupted/)
     assert.equal(html.match(/role="alert"/g)?.length, 1)
+  })
+
+  await t.test('completed review retains measurements without explanation or deployment clutter', () => {
+    const baselineConfigId = 'test-baseline'
+    const engineId = 'a'.repeat(64)
+    const numericPatch = [{ type: 'unit', id: 'yasuo', stat: 'attackDamage', value: 20 }]
+    const metric = { samples: 100, wins: 50, draws: 0, winRate: 50, confidenceInterval: [40, 60],
+      averageDamageDealt: 100, averageDamageTaken: 80, averageSurvivalDuration: 8 }
+    const batch = { games: 1000, draws: 0, champions: { yasuo: metric }, items: {}, compositions: {} }
+    const result = {
+      baselineConfigId, engineId, simulations: 1000, seed: 42, mode: 'pvp', appliedChanges: numericPatch,
+      before: batch, after: batch,
+      differences: { champions: { yasuo: { winRate: 0, averageDamageDealt: 0, averageDamageTaken: 0, averageSurvivalDuration: 0 } }, items: {} },
+      evaluationDurationMs: 25, methodology: 'Paired seeded battles.',
+    }
+    const html = render('verified', {
+      phase: 'accepted', decision: { decision: 'accept', reviewer: 'You' }, versions: [savedSpec],
+      simulations: [{ ...simulation, state: 'succeeded', baseline_config_id: baselineConfigId, engine_id: engineId,
+        numeric_patch: numericPatch, mode: 'pvp', baseline_config: { champions: { yasuo: { name: 'Yasuo', attackDamage: 25 } } }, result }],
+    })
+    assert.match(html, /Measured simulation results/)
+    assert.match(html, /Champion performance/)
+    assert.match(html, /Accepted/)
+    assert.doesNotMatch(html, /How to read this comparison|Champion samples count|Draws:|Experiment details|Accepted by|Push to playtest patch|Deployment is not implemented/)
   })
 
   await t.test('historical simulation errors stay separate from current spec errors', () => {

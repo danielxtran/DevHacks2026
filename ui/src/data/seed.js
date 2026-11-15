@@ -67,7 +67,7 @@ export function makeSeed() {
     summary: 'Test a proposed Yasuo attack-damage change from 25 to 20 using identical baseline and patched matchups. The Testing view will measure its effect on the roster.',
     stage: 'spec', status: 'needs_review', mentions: 0, firstSeen: ago(1), lastMention: ago(1),
     trend: Array(14).fill(0), sources: {},
-    stat: { label: 'Yasuo win rate', value: null, unit: '%', simulationOnly: true, note: 'Run the comparison to measure this. No live-game telemetry is connected.' },
+    stat: { label: 'Yasuo win rate', value: null, unit: '%', simulationOnly: true, note: 'Run the comparison to measure this.' },
     change: {
       label: 'Yasuo attack damage', problem: 'Evaluate whether reducing Yasuo’s attack damage changes simulated combat performance. This is an experiment, not a confirmed balance problem.',
       rationale: 'Compare damage, survival, and win rates across the same seeded matchups before deciding whether to keep the change.',

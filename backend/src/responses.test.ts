@@ -84,6 +84,8 @@ function assertRequest(requests: ReturnType<typeof mockResponses>, name: string,
   assert.equal(tools[0]?.name, name);
   assert.equal(tools[0]?.strict, true);
   assert.match(String(request.body.instructions), /untrusted/);
+  assert.doesNotMatch(String(request.body.instructions), /telemetry/i);
+  assert.doesNotMatch(JSON.stringify(request.body.input), /telemetry/i);
   assert.match(JSON.stringify(request.body.input), /Stuns feel too long/);
 }
 

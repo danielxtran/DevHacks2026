@@ -55,6 +55,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     scenarios: scenarios(env.SCENARIO_MANIFEST),
     artifactDir: resolve(env.ARTIFACT_DIR ?? '.artifacts'),
     pollIntervalMs: int(env.POLL_INTERVAL_MS, 5000, 1000, 60000),
-    maxCollectedItems: int(env.COLLECTOR_MAX_ITEMS, 500, 1, 5000),
+    maxCollectedItems: int(env.COLLECTOR_MAX_ITEMS, 2000, 1, 5000),
   };
 }

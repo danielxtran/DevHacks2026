@@ -154,23 +154,6 @@ export default function SimulationResults({ playtest }) {
         <p className="mt-3 text-sm text-muted">Most-sampled compositions first. Damage is the team total; survival averages team members. Small samples need particular care.</p>
         <PerformanceTable rows={compositions} label="Composition performance" composition />
       </details>
-
-      <section aria-labelledby="simulation-method" className="border-t border-border pt-5">
-        <h2 id="simulation-method" className="text-sm font-semibold">How to read this comparison</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
-          Champion samples count eligible team appearances. Draws count as non-wins. The 95% win-rate intervals are descriptive, approximate estimates; shared teams and side-swapped games are correlated. These intervals do not establish that a patch improves balance. Results describe this simplified simulator, rather than live TFT telemetry.
-        </p>
-        <p className="mt-2 text-sm text-muted">Draws: {count(result.before.draws)} baseline → {count(result.after.draws)} patched.</p>
-        <details className="mt-4 text-sm">
-          <summary className="cursor-pointer text-muted hover:text-text">Experiment details</summary>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div><dt className="text-xs text-muted">Baseline configuration</dt><dd className="mt-1 break-all font-mono text-xs">{result.baselineConfigId}</dd></div>
-            <div><dt className="text-xs text-muted">Evaluation time</dt><dd className="mt-1 tabular-nums">{formatMetric(result.evaluationDurationMs / 1000, 2)}s</dd></div>
-          </dl>
-          <p className="mt-4 max-w-3xl text-xs leading-relaxed text-muted">{result.methodology}</p>
-          <pre className="mt-4 max-h-64 overflow-auto rounded-md bg-surface p-4 text-xs">{JSON.stringify(playtest.request, null, 2)}</pre>
-        </details>
-      </section>
     </div>
   )
 }
