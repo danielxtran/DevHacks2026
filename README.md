@@ -31,6 +31,17 @@ npm --prefix mockreddit ci
 npm --prefix mockr ci
 ```
 
+### After pulling
+
+If a pull changes an app's `package.json` or `package-lock.json`, reinstall that app and restart its dev server. Vite reads dependencies at startup, so a server left running from before the pull reports errors like `Failed to resolve import "@supabase/supabase-js"`.
+
+```bash
+git diff --name-only ORIG_HEAD HEAD -- '*/package*.json'   # which apps changed
+npm --prefix <app> ci                                       # e.g. ui, tft-clone
+```
+
+Then stop the app with Ctrl+C and start it again (`./scripts/start.mjs` or `npm --prefix <app> run dev`).
+
 Start the backend and all three frontends in one terminal:
 
 ```bash

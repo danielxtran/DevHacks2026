@@ -8,7 +8,7 @@ This is a working prototype. Issues are loaded from Supabase when it's configure
 
 ```bash
 cd ui
-npm install        # first time only
+npm install        # first time, and after pulls that change package.json
 cp .env.example .env.local   # then fill in the Supabase keys (see below)
 npm run dev        # → http://localhost:5173
 ```
@@ -17,7 +17,7 @@ In a second terminal, start the simulation API:
 
 ```bash
 cd tft-clone
-npm install        # first time only
+npm install        # first time, and after pulls that change package.json
 npm run dev:api    # → http://127.0.0.1:3002
 ```
 
