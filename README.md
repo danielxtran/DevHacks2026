@@ -1,8 +1,8 @@
-# Patchwork
+# Player Signal
 
 **Turn player feedback into measured, human-approved balance experiments.**
 
-Patchwork is a DevHacks 2026 project for the Riot track (Prompt 02 · Agentic Development). It collects player complaints from community sites, groups them into issues with an LLM, drafts a numeric balance patch for an issue, and tests that patch in a deterministic auto-battler simulator. Every step that changes the outcome needs a person to approve it. Agents propose; people decide.
+Player Signal is a DevHacks 2026 project for the Riot track (Prompt 02 · Agentic Development). It collects player complaints from community sites, groups them into issues with an LLM, drafts a numeric balance patch for an issue, and tests that patch in a deterministic auto-battler simulator. Every step that changes the outcome needs a person to approve it. Agents propose; people decide.
 
 ```mermaid
 flowchart LR
