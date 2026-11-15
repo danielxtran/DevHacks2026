@@ -332,9 +332,9 @@ export async function startNumericExperiment(pool: Pool, issueId: string, body: 
     if (!issue.assigned_developer) throw new ConflictError('developer_assignment_required');
 
     const active = await client.query(
-      `select 1 from public.runs where selected_issue_id is not null and
+      `select 1 from public.runs where selected_issue_id=$1 and
         ((experiment_kind='hexlab_numeric' and lifecycle_phase not in ('accepted','experiment_rejected','spec_rejected'))
-         or (experiment_kind='source_code' and status::text not in ('done','failed','review'))) limit 1`,
+         or (experiment_kind='source_code' and status::text not in ('done','failed','review'))) limit 1`, [issueId],
     );
     if (active.rowCount) throw new ConflictError('active_run_exists');
 

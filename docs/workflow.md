@@ -86,7 +86,7 @@ Preconditions, all checked inside one transaction under an advisory lock:
 - `OPENAI_API_KEY` and `OPENAI_MODEL` are set (otherwise `503 spec_writer_not_configured`)
 - Hexlab is reachable and its config passes validation (otherwise `503 hexlab_unavailable`)
 - The issue exists, its `triage_state` is `open`, and it has an `assigned_developer`
-- **No other experiment is active** anywhere (`409 active_run_exists`). Only one numeric experiment can be in flight at a time.
+- **No unfinished experiment exists for this issue** (`409 active_run_exists`). Different issues can have numeric experiments in progress concurrently, including while another issue awaits review. Duplicate unfinished experiments for the same issue remain blocked.
 
 Effects:
 

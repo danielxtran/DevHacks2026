@@ -40,6 +40,54 @@ test('numeric experiment snapshots qualify joined issue fields and separate UUID
   assert.equal(released, true);
 });
 
+test('numeric experiment starts allow other issues but still reject an unfinished run on the same issue', async t => {
+  const issueId = '11111111-1111-4111-8111-111111111111';
+  const otherIssueId = '44444444-4444-4444-8444-444444444444';
+  const runId = '22222222-2222-4222-8222-222222222222';
+  for (const scenario of [
+    { name: 'another issue awaiting review', selectedIssueId: otherIssueId, phase: 'simulation_review', blocked: false },
+    { name: 'same issue awaiting spec approval', selectedIssueId: issueId, phase: 'spec_review', blocked: true },
+    { name: 'same issue awaiting final review', selectedIssueId: issueId, phase: 'simulation_review', blocked: true },
+    { name: 'same issue failed and retryable', selectedIssueId: issueId, phase: 'spec_failed', blocked: true },
+    { name: 'same issue already accepted', selectedIssueId: issueId, phase: 'accepted', blocked: false },
+    { name: 'same issue already rejected', selectedIssueId: issueId, phase: 'experiment_rejected', blocked: false },
+  ]) {
+    await t.test(scenario.name, async () => {
+      const calls: string[] = [];
+      const client = {
+        async query(sql: string, params: unknown[] = []) {
+          calls.push(sql);
+          if (sql.includes('from public.discovered_issues') && sql.includes('for update')) {
+            return { rows: [{ id: issueId, assigned_developer: 'jun', triage_state: 'open' }], rowCount: 1 };
+          }
+          if (sql.includes('select 1 from public.runs')) {
+            assert.match(sql, /where selected_issue_id=\$1 and/);
+            assert.deepEqual(params, [issueId]);
+            const active = params[0] === scenario.selectedIssueId
+              && !['accepted', 'experiment_rejected', 'spec_rejected'].includes(scenario.phase);
+            return { rows: active ? [{ active: 1 }] : [], rowCount: active ? 1 : 0 };
+          }
+          if (sql.includes('insert into public.runs')) return { rows: [{ id: runId }], rowCount: 1 };
+          return { rows: [], rowCount: 0 };
+        },
+        release() {},
+      };
+      const pool = { connect: async () => client } as unknown as Pool;
+      const start = () => startNumericExperiment(pool, issueId, { idempotencyKey: 'start-test', actor: 'You' }, {
+        baselineConfigId: 'baseline-test', engineId: 'a'.repeat(64), config: {},
+      });
+      if (scenario.blocked) {
+        await assert.rejects(start(), error => error instanceof ConflictError && error.message === 'active_run_exists');
+        assert.ok(!calls.some(sql => sql.includes('insert into public.runs')));
+        assert.equal(calls.at(-1), 'rollback');
+      } else {
+        assert.equal(await start(), runId);
+        assert.equal(calls.at(-1), 'commit');
+      }
+    });
+  }
+});
+
 const retryRunId = '22222222-2222-4222-8222-222222222222';
 const retryCommand = { actor: 'You', expectedRevision: 2, idempotencyKey: 'retry-1' };
 

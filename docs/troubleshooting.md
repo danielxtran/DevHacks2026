@@ -43,7 +43,7 @@
 | `503 spec_writer_not_configured` | No OpenAI credentials | Configure them and restart |
 | `503 hexlab_unavailable` | Hexlab isn't reachable, or its config failed validation | `curl http://127.0.0.1:3002/api/health` |
 | `409 developer_assignment_required` | No developer is assigned | Assign one on the issue page |
-| `409 active_run_exists` | Only one experiment can be active at a time | Finish, reject, or decide the active one |
+| `409 active_run_exists` | This issue already has an unfinished experiment (or a merge involves one) | Open that experiment, retry it if failed, or finish its review; experiments on other issues do not block numeric starts |
 | `409 *_revision_conflict` | Another tab or person changed the issue or run | Reload and redo the action |
 | Run stuck in `spec_queued` | Look at `workflow_jobs` for the run: `state`, `attempt`, `error` | A job at `max_attempts` won't be claimed again |
 | Simulation `failed` with `hexlab_baseline_changed` | Hexlab's `champions.json` or engine files changed after the experiment froze its baseline | Restore the original config, or start a new experiment |

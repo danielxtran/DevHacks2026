@@ -38,7 +38,7 @@ For the lifecycle these commands drive, see [Experiment workflow](../workflow.md
 |---|---|
 | `issue_revision_conflict`, `run_revision_conflict` | `expectedRevision` is stale. Re-read and try again. |
 | `idempotency_conflict` | The key was already used for a different request |
-| `active_run_exists` | Another experiment is in progress (only one at a time), or the issue being merged has one |
+| `active_run_exists` | This issue already has an unfinished experiment, or an issue involved in a merge has one. Numeric experiments on different issues can proceed independently. |
 | `issue_not_open` | Starting an experiment on a dismissed or merged issue |
 | `developer_assignment_required` | Starting an experiment without an assigned developer |
 | `cannot_merge_issue_into_self`, `merge_target_not_canonical` | Invalid merge |
