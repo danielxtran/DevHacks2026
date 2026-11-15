@@ -6,7 +6,7 @@ All data lives in the `mockreddit` schema in Supabase (`supabase/migrations/0002
 
 ## Setup (hosted Supabase)
 
-Put the hosted project's `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the repository-root `.env`; both Vite apps load this shared file. Apply migrations `0001`–`0006` from the repository's `supabase/migrations/` directory to the hosted project in numeric order, then expose `public`, `graphql_public`, `mockreddit`, and `mockr` in its API settings. Migration `0004_mockr.sql` depends on `public.feedback_posts` created by `0001`.
+Put the hosted project's `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the repository-root `.env`; both Vite apps load this shared file. Apply the migrations in `supabase/migrations/` as described in the [migration guide](../supabase/migrations/README.md) (never replay `0001`–`0004` on the shared hosted project), then expose `public`, `graphql_public`, `mockreddit`, and `mockr` in its API settings. Migration `0004_mockr.sql` depends on `public.feedback_posts` created by `0001`.
 
 The Vite anon key is public. Never put a service-role key or database password in the frontend environment.
 

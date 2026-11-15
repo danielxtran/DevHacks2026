@@ -1,104 +1,122 @@
-# DevHacks2026
+# Patchwork
 
-Riotdit and R use one hosted Supabase project. The Vite apps run locally; Supabase supplies Postgres, the PostgREST RPC API, and Realtime. No local Supabase stack or Docker is needed.
+**Turn player feedback into measured, human-approved balance experiments.**
 
-## Hosted Supabase setup
+Patchwork is a DevHacks 2026 project for the Riot track (Prompt 02 · Agentic Development). It collects player complaints from community sites, groups them into issues with an LLM, drafts a numeric balance patch for an issue, and tests that patch in a deterministic auto-battler simulator. Every step that changes the outcome needs a person to approve it. Agents propose; people decide.
 
-1. Put the hosted project's API URL and anon/publishable key in the repository-root `.env`:
-
-   ```dotenv
-   VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-public-anon-key
-   ```
-
-   Both Vite configs load this shared root file. The anon key is public and must be protected by the database's RLS policies; never put a service-role or database password in a `VITE_` variable.
-
-2. For a fresh project, apply migrations `0001`–`0008` in numeric order. For the existing project, **do not replay `0001`–`0004`**: that schema predates migration tracking. Migrations `0005`–`0008` are recorded as applied; see [`supabase/migrations/README.md`](supabase/migrations/README.md) for the project-specific receipt and verification. Never reset existing project data.
-3. In Supabase API settings, expose `public`, `graphql_public`, `mockreddit`, and `mockr` (retain the existing default schemas) for the source apps' backing stores. The backend collector reads both sources through their public HTTP APIs and needs no Supabase source credentials.
-4. Copy `backend/.env.example` to `backend/.env`. Add `SUPABASE_DB_URL` using the project's Postgres connection string from the Supabase Connect panel. Keep this server-only secret out of the root `.env`; use the direct or session-pooler connection. The backend needs it for transactional workflow writes. The browser URL and anon key alone are not enough to run the backend.
-5. Hosted Discovery/Design use the OpenAI Responses API. Create an API key in your [OpenAI project](https://platform.openai.com/api-keys), enable API billing, and set `OPENAI_API_KEY` and `OPENAI_MODEL` in `backend/.env`. Choose a model available to your project that supports Responses function calling; there is no default model. A ChatGPT subscription does not include API usage. Keep the key server-only (never `VITE_`), set a project budget, and restart the backend after changing it. The polling worker can make billable calls automatically.
-
-See [`.env.example`](.env.example) and [`backend/.env.example`](backend/.env.example) for variable names. Migrations `0007` and `0008` were applied to the configured hosted project on 2026-11-15 and verified; review the receipt before applying migrations elsewhere.
-
-## Run the apps
-
-Use Node.js **22.12 or newer**. After configuring the hosted project and environment files above, install dependencies once from the repository root:
-
-```bash
-npm --prefix backend ci
-npm --prefix ui ci
-npm --prefix mockreddit ci
-npm --prefix mockr ci
+```mermaid
+flowchart LR
+  subgraph Sources["Mock community sites"]
+    RD["Riotdit<br/>r/PatchworkTFT<br/>:5174"]
+    R["R (microblog)<br/>:5175"]
+  end
+  subgraph Backend[":3001 backend"]
+    C[Collector] --> D[Discovery agent]
+    D --> W[Workflow worker<br/>Spec Writer + simulation jobs]
+  end
+  RD -- public JSON API --> C
+  R -- public JSON API --> C
+  W -- /api/simulate --> H["Hexlab simulator<br/>API :3002 · dashboard :5176"]
+  Backend <--> DB[(Supabase Postgres)]
+  UI["Pipeline UI<br/>:5173"] -- /api proxy --> Backend
+  UI -. replay links .-> H
 ```
 
-### After pulling
+## What's in the repo
 
-If a pull changes an app's `package.json` or `package-lock.json`, reinstall that app and restart its dev server. Vite reads dependencies at startup, so a server left running from before the pull reports errors like `Failed to resolve import "@supabase/supabase-js"`.
+| Directory | What it is | Stack |
+|---|---|---|
+| [`backend/`](backend/README.md) | The authority for workflow state. Collects feedback, runs Discovery and the Spec Writer, queues Hexlab simulations, and records human decisions. | Node 22 · Express 5 · `pg` · Zod · OpenAI Responses API |
+| [`ui/`](ui/README.md) | **Pipeline UI.** The tracker people work in: Board, List, issue evidence, spec review, test results, decisions. | Vite 8 · React 19 · React Router 7 · Tailwind 4 · Recharts |
+| [`tft-clone/`](tft-clone/README.md) | **Hexlab.** A small, deterministic auto-battler with a balance-experiment API and replay dashboard. | Vite · React · Express · Zod · Vitest |
+| [`mockreddit/`](mockreddit/README.md) | **Riotdit.** A mock subreddit that serves Reddit-shaped JSON. Judges can post into it live. | Vite · React · Express · Supabase |
+| [`mockr/`](mockr/README.md) | **R.** A mock microblog that serves X API v2-shaped JSON. | Vite · React · Express · Supabase |
+| [`supabase/`](supabase/migrations/README.md) | SQL migrations for every schema (`public`, `mockreddit`, `mockr`). | Postgres |
+| [`scripts/`](scripts/start.mjs) | `start.mjs`, the one-command launcher for all five apps. | Node |
+| [`docs/`](docs/README.md) | Architecture, API reference, workflow, database, and operations guides. | Markdown |
+
+## Quick start
+
+You need **Node.js 22.12+**, a hosted Supabase project, and (for Discovery and the Spec Writer) an OpenAI API key with billing enabled.
 
 ```bash
-git diff --name-only ORIG_HEAD HEAD -- '*/package*.json'   # which apps changed
-npm --prefix <app> ci                                       # e.g. ui, tft-clone
-```
+# 1. Environment
+cp .env.example .env                    # VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+cp backend/.env.example backend/.env    # SUPABASE_DB_URL, OPENAI_API_KEY, OPENAI_MODEL
 
-Then stop the app with Ctrl+C and start it again (`./scripts/start.mjs` or `npm --prefix <app> run dev`).
+# 2. Dependencies (once, and again whenever a package-lock.json changes)
+for app in backend ui mockreddit mockr tft-clone; do npm --prefix "$app" ci; done
 
-Start the backend and all three frontends in one terminal:
-
-```bash
+# 3. Everything, in one terminal
 ./scripts/start.mjs
 ```
 
-- Pipeline UI: http://127.0.0.1:5173 (live Discovery board/list/evidence; refreshes every five seconds. Workflow controls are being restored and require migrations `0007`–`0008`.)
-- Riotdit: http://127.0.0.1:5174
-- R: http://127.0.0.1:5175
-- Backend: http://127.0.0.1:3001 (`API_PORT` may override this)
+| App | URL |
+|---|---|
+| Pipeline UI | http://127.0.0.1:5173 |
+| Riotdit | http://127.0.0.1:5174/r/PatchworkTFT |
+| R | http://127.0.0.1:5175 |
+| Hexlab dashboard | http://127.0.0.1:5176 |
+| Backend API | http://127.0.0.1:3001 (`API_PORT`) |
+| Hexlab API | http://127.0.0.1:3002/api (`HEXLAB_API_URL`) |
 
-The launcher does not start the Hexlab simulator. Start it separately for backend-owned numeric experiments; configure `HEXLAB_API_URL` only if it is not at the loopback default `http://127.0.0.1:3002/api`. The prior browser-managed simulator workflow is not the live tracker's source of truth. To run Hexlab:
+Before the first run, apply the database migrations. **Read the [migration guide](supabase/migrations/README.md) first:** the shared hosted project already has some of them, and replaying old migrations there is destructive.
 
-```bash
-npm --prefix tft-clone ci
-npm --prefix tft-clone run dev   # dashboard http://localhost:5176 · API http://127.0.0.1:3002
-```
+The full walkthrough is in **[Getting started](docs/getting-started.md)**.
 
-The launcher checks dependencies and occupied ports before starting, suppresses automatic browser opening, and stops its app process groups on Ctrl+C or an app exit. It works from any working directory on Linux/macOS/WSL. It does not install packages, apply migrations, reset data, or start the Hexlab simulator (see above). Each app loads its own environment; backend-only secrets are not copied into Vite processes. The backend starts polling and can make billable model calls when credentials are configured.
+> [!WARNING]
+> Once `OPENAI_API_KEY` and `OPENAI_MODEL` are set, the backend's polling worker makes **billable** model calls on its own whenever new feedback arrives. Set a budget on your OpenAI project.
 
-For one app, use `npm --prefix <app> run dev` instead. Launcher tests use fake app processes and no hosted database/model calls:
+## How it works
 
-```bash
-node --test scripts/start.test.mjs
-```
+1. **Collect.** Every few seconds the backend reads the two mock sites through their public HTTP APIs. It follows pagination, keeps comment threads intact, and respects rate-limit headers.
+2. **Discover.** New or changed feedback goes into a queue. The Discovery agent groups it into issues ("Yasuo feels too strong") and may only cite feedback IDs it was given.
+3. **Triage.** People assign a developer, edit titles and tags, comment, merge duplicates, or dismiss noise in the Pipeline UI.
+4. **Specify.** Starting an experiment freezes the issue's evidence and the exact Hexlab baseline. The Spec Writer drafts a markdown spec and a structured numeric patch, such as `yasuo.attackDamage: 25 → 20`. People edit it, ask for revisions, approve it, or reject it.
+5. **Simulate.** Approving the spec queues a Hexlab job. Baseline and patched configurations play exactly the same seeded matchups, and the result is checked against the request before it is saved.
+6. **Decide.** A reviewer accepts or rejects the experiment against a specific spec version and simulation. Finishing a run does not count as accepting it.
 
-The legacy simulator workflow reference remains in [ui/SIMULATOR.md](ui/SIMULATOR.md). The restored `hexlab_numeric` path is designed to freeze the actual Hexlab config/engine identity and persist a human-approved numeric experiment through the backend; it does not require fake Git revisions or three source-code scenarios. The new workflow implementation and migrations are still under validation. The retained source-code run path may still require `BASELINE_REVISION` and exactly three `SCENARIO_MANIFEST` entries.
+The lifecycle, its guards, and how retries work are covered in **[Experiment workflow](docs/workflow.md)**.
 
-The backend loads the repository-root `.env` and binds to loopback. Database, OpenAI, and workflow state remain server-side. Do not claim hosted persistence or model access until migrations and the operator-approved walkthrough have been verified.
+## Documentation
 
-## Source collection
+| Guide | Covers |
+|---|---|
+| [Getting started](docs/getting-started.md) | First-time setup, from an empty Supabase project to a running demo |
+| [Architecture](docs/architecture.md) | Components, data flow, trust boundaries, design principles |
+| [Configuration](docs/configuration.md) | Every environment variable, by app |
+| [Backend internals](docs/backend.md) | Workers, Discovery, Spec Writer, Hexlab client, artifact store |
+| [Backend API reference](docs/api/backend-api.md) | Every endpoint, with request bodies, responses, and error codes |
+| [Experiment workflow](docs/workflow.md) | Lifecycle state machine, optimistic concurrency, idempotency |
+| [Database](docs/database.md) | Schemas, tables, and what writes each one |
+| [Development & testing](docs/development.md) | Test suites, conventions, repository layout |
+| [Troubleshooting](docs/troubleshooting.md) | Common failures and fixes |
+| [Live tracker read contract](docs/contracts/tracker-http-examples.md) | The read-only contract the UI relies on |
+| [Hexlab API](tft-clone/README.md#agent-api) | Simulator endpoints and methodology |
+| [Riotdit API](mockreddit/API.md) · [R API](mockr/API.md) | Source-site public APIs |
 
-The backend reads public HTTP APIs, without source keys or bearer tokens:
+## Project status
 
-- Riotdit: `GET http://127.0.0.1:5174/r/PatchworkTFT/new.json?limit=100`
-- R: `GET http://127.0.0.1:5175/2/tweets/search/recent?query=*&max_results=100`
+| Area | Status |
+|---|---|
+| Collection from Riotdit and R | Working; covered by tests |
+| Discovery (LLM grouping) | Working once OpenAI credentials are configured |
+| Issue triage (assign, edit, comment, dismiss, restore, merge) | Backend complete; UI connected |
+| Numeric experiments (spec → approve → simulate → decide) | Backend complete (migrations `0007`–`0008`); UI pages connected, end-to-end walkthrough still being validated |
+| Legacy source-code run path (`BASELINE_REVISION`, `SCENARIO_MANIFEST`) | Kept for compatibility; not the main path |
+| Deploying an accepted patch | Not implemented (`/capabilities` reports `deployment: disabled`) |
 
-Override `RIOTDIT_BASE_URL` and `R_BASE_URL` in `backend/.env` when the apps run elsewhere. Start both source apps with `npm run dev` so their API servers run behind the Vite proxies. The source apps retain their root Supabase environment; the backend uses its server-only Postgres connection for persistence.
+## Security notes
 
-Sweeps rescan from the newest page, follow pagination, retain comments/replies, and respect rate-limit cooldowns. A slow source delays Discovery and the next source sweep; the working tree adds a separate workflow-command lane, which still needs validation. `COLLECTOR_MAX_ITEMS` caps Riotdit root posts (not inline comments) and R tweets; capped or unresolved-parent results remain incomplete. Changing source URL spelling can change evidence fingerprints and trigger one-time reanalysis.
+- The backend binds only to loopback and refuses any other `API_HOST`. It has no authentication; it is a local development tool.
+- `SUPABASE_DB_URL` and `OPENAI_API_KEY` are server-only. Never put them in a `VITE_*` variable or in the repository-root `.env`.
+- The browser anon key can do what the source apps intend (post, vote, read) but cannot write workflow tables. Row-level security and grants enforce this.
+- All player text is handled as **untrusted data**. Both LLM prompts say so, model outputs are schema-checked and every cited ID is verified, and the UIs render source text as plain text.
 
-The Pipeline UI reads these APIs through Vite's `/api` proxy. It needs no browser database/model credentials and does not use the old UI seed tables. Failed refreshes are shown as stale/disconnected, never replaced with prototype data. The backend-owned workflow UI is being restored in phases; current progress and remaining gates are in [the restoration spec](.scratch/restore-workflow-ui/spec.md) and [`ui/README.md`](ui/README.md).
+## Notes for agents
 
-## Backend interface
+Mobile accessibility doesn't matter here. This is a desktop dev tool.
 
-- `GET /health` — database/source/model configuration status
-- `GET /issues`, `GET /issues/:id`, and `GET /issues/:id/runs` — discovered issues, source evidence, and run history
-- `GET /sources` and `GET /capabilities` — collection state and workflow capability reasons
-- `PATCH /issues/:id`, `POST /issues/:id/comments`, `/dismiss`, `/restore`, `/merge` — durable issue collaboration commands
-- `POST /issues/:id/runs` — `{ "idempotencyKey": "...", "actor": "..." }`; returns HTTP 202 after transactional experiment creation and job queueing
-- `GET /runs/:id` — run status, stage history, and human decision
-- `GET /runs/:id/specs`, `/simulations`, `/artifacts` and `GET /artifacts/:id` — saved versions, simulation history, and opaque-ID artifact access
-- `PATCH /runs/:id/specs`, `POST /runs/:id/spec-revisions`, `/spec-approval`, `/spec-rejection`, `/simulations`, `/return-to-development` — versioned human review and queued simulator commands
-- `POST /runs/:id/simulations/:simulationId/retry`, `/resume`, and `/decision` — explicit retries and revision-bound human decisions
+## Riot notice
 
-The source apps' internal RPC examples are retained as historical references in [`docs/contracts/source-rpc-examples.md`](docs/contracts/source-rpc-examples.md); the collector contract is documented in [`docs/contracts/source-http-examples.md`](docs/contracts/source-http-examples.md). Browser anon permissions allow intended source-app operations but do not allow direct workflow-state writes.
-
-## For agents
-
-Mobile accessibility does not matter. This is a dev tool for desktop.
+Patchwork and Hexlab are independent hackathon prototypes. Riot Games does not endorse them. See [`tft-clone/README.md`](tft-clone/README.md#independent-prototype-notice) and the asset note in [`ui/SIMULATOR.md`](ui/SIMULATOR.md#riot-assets).

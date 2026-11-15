@@ -1,6 +1,6 @@
 # Pipeline UI
 
-The live tracker uses backend-owned Discovery and workflow state, not the old Supabase `issues`/`ui_issue_meta` prototype tables. Issue metadata/assignment, discussion, triage, merge, and experiment-start controls are being connected to the backend. Initial Development, Testing, and review pages are now in the working tree but remain incomplete and unverified; see the [workflow restoration status](../.scratch/restore-workflow-ui/spec.md).
+The live tracker uses backend-owned Discovery and workflow state, not the old Supabase `issues`/`ui_issue_meta` prototype tables. Issue metadata/assignment, discussion, triage, merge, and experiment-start controls are being connected to the backend. Development, Testing, and review pages are connected to the backend's numeric experiment workflow; see [Experiment workflow](../docs/workflow.md) for the lifecycle they drive.
 
 ## Run
 
@@ -11,7 +11,7 @@ npm --prefix ui ci
 npm --prefix ui run dev
 ```
 
-Open http://127.0.0.1:5173. Start the backend separately (`npm --prefix backend run dev`), or use `./scripts/start.mjs` to start the backend, UI, and both source apps together. Starting the backend also starts collection and can make billable Discovery calls when model credentials are configured.
+Open http://127.0.0.1:5173. Start the backend separately (`npm --prefix backend run dev`), or use `./scripts/start.mjs` to start the backend, UI, both source apps, and Hexlab together. Starting the backend also starts collection and can make billable Discovery calls when model credentials are configured.
 
 The UI needs no Supabase or OpenAI credentials. The backend retains its server-only `backend/.env`; the mock source apps still need the shared repository-root `.env`.
 
@@ -33,7 +33,7 @@ A separately hosted production bundle needs an equivalent reverse proxy for `/ap
 - A failed refresh retains the last successful response with a stale-data warning. Initial failure and genuinely empty Discovery results have distinct states. There is no seed/localStorage fallback or generated agent progress.
 - A recorded human decision closes an experiment as Accepted/Rejected; issue triage dismissal is separate. A completed run alone remains awaiting a human decision; failed/interrupted runs remain visible.
 
-The current working tree adds backend command mapping and issue-detail controls for assignment/metadata, discussion, dismiss/restore, merge, and starting an experiment, plus initial Development/Testing/review pages. These changes are uncommitted and unverified. Board/List filtering, command recovery edge cases, and complete history/replay behavior remain; do not infer completion or persistence until migrations, tests, and the live walkthrough pass. Trends and gameplay statistics are not invented from source counts.
+Issue-detail controls cover assignment/metadata, discussion, dismiss/restore, merge, and starting an experiment; Development/Testing/review pages drive the backend commands in the [API reference](../docs/api/backend-api.md). Board/List filtering, command recovery edge cases, and complete history/replay behavior are still being validated against the live walkthrough. Trends and gameplay statistics are not invented from source counts.
 
 The previous simulator implementation is preserved in `src/simulation/`, simulation components/pages, `src/store/simulation-provider.jsx`, and Hexlab replay code in `tft-clone/`. Both `/api` and `/hexlab-api` proxies are configured. The old simulator provider is not the authority for the restored backend workflow; see [the preserved upstream simulator reference](SIMULATOR.md) for component/contract references. The test command runs live-tracker and simulator tests without requiring a running Hexlab service.
 
