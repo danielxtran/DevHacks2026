@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SOURCES } from '../data/constants'
-import { makeClusterPosts } from '../data/generators'
 import { usePipeline } from '../store/pipeline'
 import { UpvoteIcon } from './ui'
 import { num, timeAgo } from './format'
@@ -20,22 +19,24 @@ export function Sparkline({ data, width = 72, height = 20 }) {
 
 const PAGE = 15
 
-/** One post in the browser: score, then the title linking to the original (empty href until the backend is connected). */
+/** Saved source feedback with its actual score, text, and original link. */
 function PostRow({ post }) {
   return (
     <li className="grid grid-cols-[4.5rem_1fr] gap-3 py-3">
       <span className="flex items-start justify-end gap-1 pt-0.5 font-mono text-xs text-muted" title="Score (upvotes or likes)"><UpvoteIcon className="mt-px" />{num(post.engagement.likes)}</span>
       <div className="min-w-0">
-        <a href="" target="_blank" rel="noreferrer" onClick={(e) => e.preventDefault()} className="leading-snug hover:underline">
-          {post.text}
-          <span aria-hidden className="ml-1 text-muted">↗</span>
-          <span className="sr-only"> (opens original post in a new tab)</span>
-        </a>
+        {post.sourceUrl ? (
+          <a href={post.sourceUrl} target="_blank" rel="noreferrer" className="whitespace-pre-wrap leading-snug hover:underline">
+            {post.text}<span aria-hidden className="ml-1 text-muted">↗</span>
+            <span className="sr-only"> (opens original feedback in a new tab)</span>
+          </a>
+        ) : <p className="whitespace-pre-wrap leading-snug">{post.text}</p>}
         <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted">
           {post.pinned && <span className="text-text">Representative</span>}
           <span>{post.author}</span>
           <time dateTime={post.ts}>{timeAgo(post.ts)}</time>
-          <span>{num(post.engagement.replies)} replies</span>
+          <span>{post.kind === 'comment' ? 'Comment / reply' : 'Post'}</span>
+          {post.engagement.replies != null && <span>{num(post.engagement.replies)} replies</span>}
         </div>
       </div>
     </li>
@@ -48,8 +49,8 @@ function PostRow({ post }) {
  * and an infinite-scroll list sorted by score.
  */
 export function SourceBrowser({ issue }) {
-  const { state, dispatch } = usePipeline()
-  const all = useMemo(() => makeClusterPosts(issue), [issue])
+  const { state, refresh } = usePipeline()
+  const all = issue.feedback
   const [open, setOpen] = useState(null) // platform id, or null = pill view
   const [q, setQ] = useState('')
   const [shown, setShown] = useState(PAGE)
@@ -84,6 +85,7 @@ export function SourceBrowser({ issue }) {
     <div className="rounded-lg bg-surface p-4">
       {!open ? (
         <div className="flex flex-wrap gap-2">
+          {!all.length && <p className="text-sm text-muted">No saved feedback is available.</p>}
           {Object.keys(SOURCES).filter((k) => issue.sources[k]).map((k) => {
             const err = state.sourceStatus[k]?.state === 'error'
             return (
@@ -94,10 +96,10 @@ export function SourceBrowser({ issue }) {
                   className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors hover:border-text ${err ? 'border-warning/70' : 'border-border-strong'}`}
                 >
                   {SOURCES[k].label} <span className="font-mono text-muted">{num(issue.sources[k])}</span>
-                  {err && <span className="ml-1.5 text-warning">! <span className="sr-only">posts failed to load</span></span>}
+                  {err && <span className="ml-1.5 text-warning">! <span className="sr-only">source collection failed</span></span>}
                 </button>
                 {err && (
-                  <button type="button" onClick={() => dispatch({ type: 'SOURCE_RETRY', source: k })} className="text-xs text-muted underline underline-offset-4 hover:text-text">
+                  <button type="button" onClick={refresh} className="text-xs text-muted underline underline-offset-4 hover:text-text">
                     Retry
                   </button>
                 )}
@@ -110,7 +112,7 @@ export function SourceBrowser({ issue }) {
           <div className="flex items-center gap-3">
             <button type="button" onClick={() => setOpen(null)} className="shrink-0 text-sm font-semibold text-muted hover:text-text">← Back</button>
             <label className="min-w-0 flex-1">
-              <span className="sr-only">Search {SOURCES[open].label} posts</span>
+              <span className="sr-only">Search {SOURCES[open].label} feedback</span>
               <input
                 type="search"
                 autoFocus
@@ -120,21 +122,21 @@ export function SourceBrowser({ issue }) {
                   setShown(PAGE)
                   if (boxRef.current) boxRef.current.scrollTop = 0
                 }}
-                placeholder={`Search ${num(issue.sources[open])} ${SOURCES[open].label} posts`}
+                placeholder={`Search ${num(issue.sources[open])} ${SOURCES[open].label} feedback items`}
                 className="h-9 w-full rounded-full border border-border-strong bg-transparent px-4 text-sm placeholder:text-muted/70"
               />
             </label>
           </div>
           <div ref={boxRef} className="mt-3 max-h-[32rem] overflow-y-auto pr-2" aria-live="polite">
             {list.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted">No {SOURCES[open].label} posts match “{q}”.</p>
+              <p className="py-10 text-center text-sm text-muted">No {SOURCES[open].label} feedback matches “{q}”.</p>
             ) : (
               <ol className="divide-y divide-border">
                 {list.slice(0, shown).map((p) => <PostRow key={p.id} post={p} />)}
               </ol>
             )}
             <div ref={endRef} className="py-3 text-center text-xs text-muted">
-              {more ? 'Loading more…' : list.length > 0 ? `That’s all ${num(list.length)} posts.` : null}
+              {more ? 'Loading more…' : list.length > 0 ? `Showing ${num(list.length)} saved feedback items.` : null}
             </div>
           </div>
         </div>

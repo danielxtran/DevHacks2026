@@ -13,7 +13,7 @@ export function Sources({ sources }) {
         .map((k) => {
           const err = state.sourceStatus[k]?.state === 'error'
           return (
-            <span key={k} title={`${SOURCES[k].label}: ${num(sources[k])} posts${err ? ' (scraper failing)' : ''}`} className={err ? 'text-warning' : ''}>
+            <span key={k} title={`${SOURCES[k].label}: ${num(sources[k])} feedback items${err ? ' (collection failed)' : ''}`} className={err ? 'text-warning' : ''}>
               <span className="text-text">{SOURCES[k].glyph}</span> {num(sources[k])}
               {err && <span> ! <span className="sr-only">scraper failing</span></span>}
             </span>
@@ -26,7 +26,7 @@ export function Sources({ sources }) {
 /** One tag pill: fix-type (tinted, direction icon) or specific (neutral, colored dot). Optional × to remove. */
 export function TagPill({ id, onRemove, size = 'md' }) {
   const t = tagInfo(id)
-  if (!t) return null
+  if (!t) return <span className="rounded-full border border-border px-3 py-1 text-xs text-muted">{id}</span>
   const color = TARGETS[t.target].color
   const fixType = t.family === 'fix'
   const pad = size === 'sm' ? 'py-0.5 pl-2.5 text-[11px]' : 'py-1 pl-3 text-xs'

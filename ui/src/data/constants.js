@@ -4,7 +4,7 @@ export const STAGES = [
   { id: 'feedback', label: 'Feedback' },
   { id: 'spec', label: 'Spec' },
   { id: 'playtest', label: 'Playtest' },
-  { id: 'verified', label: 'Verified' },
+  { id: 'verified', label: 'Human decision' },
 ]
 
 // Work Board columns. Each column groups one or more pipeline stages.
@@ -27,7 +27,8 @@ export const STATUSES = {
   approved: { label: 'Approved', icon: '✓', tone: 'success' },
   rejected: { label: 'Rejected', icon: '✕', tone: 'muted' },
   error: { label: 'Error', icon: '!', tone: 'warning' },
-  done: { label: 'Verified', icon: '✓', tone: 'success' },
+  done: { label: 'Accepted', icon: '✓', tone: 'success' },
+  unknown: { label: 'Unknown state', icon: '?', tone: 'muted' },
 }
 
 export const AGENTS = {
@@ -96,9 +97,9 @@ export function sortTags(ids) {
   const pos = (id) => (TAGS[id] ? all.indexOf(id) : all.length)
   const key = (id) => {
     const t = tagInfo(id)
-    return (t.family === 'fix' ? 0 : 100) + TARGET_ORDER[t.target]
+    return (t?.family === 'fix' ? 0 : 100) + (TARGET_ORDER[t?.target] ?? 100)
   }
-  return ids.filter((t) => tagInfo(t)).sort((x, y) => key(x) - key(y) || pos(x) - pos(y))
+  return [...ids].sort((x, y) => key(x) - key(y) || pos(x) - pos(y))
 }
 
 // Devs who can be assigned to issues (the teammates in the demo data).
@@ -112,8 +113,8 @@ export const DEVS = {
 export const devLabel = (id) => DEVS[id]?.name ?? id
 
 export const SOURCES = {
-  reddit: { label: 'Reddit', glyph: 'r/' },
-  x: { label: 'X', glyph: 'X' },
+  reddit: { label: 'Riotdit', glyph: 'r/' },
+  x: { label: 'R', glyph: 'R' },
 }
 
 export const GAMES = ['Shardfall', 'Tidebreak', 'Hexlab']

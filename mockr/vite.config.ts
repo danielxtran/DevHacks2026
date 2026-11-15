@@ -9,6 +9,6 @@ const proxy = { '/2': api, '/api': api };
 export default defineConfig({
   envDir: '..',
   plugins: [react()],
-  server: { port: 5175, strictPort: true, proxy },
-  preview: { port: 5175, strictPort: true, proxy },
+  server: { host: '127.0.0.1', port: 5175, strictPort: true, proxy },
+  preview: { host: '127.0.0.1', port: 5175, strictPort: true, proxy },
 });

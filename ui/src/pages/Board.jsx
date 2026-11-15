@@ -1,13 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePipeline } from '../store/pipeline'
-import { BOARD, DEVS, SOURCES, STAGES, TARGETS, devLabel, sortTags, tagInfo } from '../data/constants'
+import { BOARD, SOURCES, STAGES, TARGETS, sortTags, tagInfo } from '../data/constants'
 import { Section, StateView, UpvoteIcon } from '../components/ui'
 import { StatusBadge } from '../components/badges'
 import { num } from '../components/format'
-
-// Which issue page a card opens, by stage.
-const STAGE_ROUTE = { feedback: '', spec: '/spec', playtest: '/playtest', verified: '/verified' }
 
 const STAGE_LABEL = Object.fromEntries(STAGES.map((s) => [s.id, s.label]))
 
@@ -21,7 +18,7 @@ const DATES = {
   year: ['This year', 24 * 365],
 }
 const EMPTY = { issues: 'No new issues', development: 'No issues in development', testing: 'No issues in testing', closed: 'No closed issues' }
-const NO_FILTERS = { platform: 'all', date: 'all', tag: 'all', dev: 'all' }
+const NO_FILTERS = { platform: 'all', date: 'all', tag: 'all' }
 
 export function PageTitle({ title, children }) {
   return (
@@ -54,29 +51,22 @@ const inProgress = (issue) => !issue.dismissed && issue.status !== 'queued' && i
 
 /** Card tags: one small dot per target color used (unit, trait, item, augment, system, bug fix). Hover lists the tags. */
 function TagDots({ tags }) {
-  const names = tags.map((t) => tagInfo(t).label).join(', ')
-  const targets = [...new Set(tags.map((t) => tagInfo(t).target))]
+  const names = tags.map((t) => tagInfo(t)?.label ?? t).join(', ')
+  const targets = [...new Set(tags.map((t) => tagInfo(t)?.target).filter(Boolean))]
   return (
     <div className="mt-3 flex items-center gap-1.5" title={names}>
       {targets.map((k) => (
         <span key={k} aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: TARGETS[k].color }} />
       ))}
+      {tags.filter(tag => !tagInfo(tag)).map(tag => <span key={tag} className="rounded bg-surface px-2 py-0.5 text-xs text-muted">{tag}</span>)}
       <span className="sr-only">Tags: {names}</span>
     </div>
   )
 }
 
-/** Queued and Verified show as status; in-progress cards show ◆ and who's on it. */
+/** Display the actual backend stage or persisted human decision. */
 function CardStatus({ issue }) {
-  if (issue.dismissed) return <span className="text-xs text-muted">✕ Rejected</span>
-  if (!inProgress(issue)) return <StatusBadge status={issue.status} />
-  const devs = issue.devs ?? []
-  return (
-    <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
-      <span aria-hidden className="font-mono text-accent-text">◆</span>
-      <span className="truncate">{devs.length ? devs.map(devLabel).join(', ') : 'Unassigned'}</span>
-    </span>
-  )
+  return <StatusBadge status={issue.status} label={issue.statusLabel} />
 }
 
 /** One Work Board card. Shows the sub-stage only where a column spans more than one. */
@@ -87,7 +77,7 @@ function BoardCard({ issue, showStage }) {
   return (
     <li>
       <Link
-        to={`/issues/${issue.id}${STAGE_ROUTE[issue.stage]}`}
+        to={`/issues/${issue.id}`}
         className={`group block rounded-lg border bg-card p-3.5 shadow-sm transition-[transform,background-color,border-color] hover:-translate-y-px hover:bg-card-hover ${failed ? 'border-warning/60' : working ? 'border-accent/60' : 'border-border hover:border-border-strong'}`}
       >
         {showStage && <div className="mb-1.5 text-xs text-muted">{STAGE_LABEL[issue.stage]}</div>}
@@ -96,7 +86,7 @@ function BoardCard({ issue, showStage }) {
         {tags.length > 0 && <TagDots tags={tags} />}
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
           <CardStatus issue={issue} />
-          <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-muted" title="Mentions"><UpvoteIcon />{num(issue.mentions)}<span className="sr-only"> mentions</span></span>
+          <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-muted" title="Saved feedback items"><UpvoteIcon />{num(issue.mentions)}<span className="sr-only"> feedback items</span></span>
         </div>
       </Link>
     </li>
@@ -116,7 +106,7 @@ export default function Board() {
     .filter((i) => f.platform === 'all' || i.sources[f.platform] > 0)
     .filter((i) => f.date === 'all' || new Date(i.firstSeen).getTime() >= cutoff)
     .filter((i) => f.tag === 'all' || (i.tags ?? []).some((t) => tagInfo(t)?.target === f.tag))
-    .filter((i) => f.dev === 'all' || (i.devs ?? []).includes(f.dev))
+
   // Tags filter = the color categories shown as dots on cards (Unit, Trait, Item, Augment, System, Bug fix).
   const tagOptions = [['all', 'All'], ...Object.entries(TARGETS).map(([k, t]) => [k, t.label])]
   const active = Object.values(f).filter((v) => v !== 'all').length
@@ -125,21 +115,20 @@ export default function Board() {
     return (
       <>
         <h1 className="sr-only">Board</h1>
-        <StateView kind="loading" title="No issues yet — ingestion starting">Issues appear here as the Collector clusters posts from Reddit and X.</StateView>
+        <StateView kind="empty" title="No discovered issues yet">Saved Discovery groups will appear here automatically.</StateView>
       </>
     )
   }
 
   return (
     <>
-      <PageTitle title="Work Board" />
+      <PageTitle title="Work Board">Live backend state. Feedback is synthetic player input, not measured gameplay evidence.</PageTitle>
 
       <Section className="border-t-0 pt-0">
         <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-3" role="group" aria-label="Filter the board">
           <Select label="Platform" value={f.platform} onChange={set('platform')} options={[['all', 'All'], ...Object.entries(SOURCES).map(([k, v]) => [k, v.label])]} />
           <Select label="Date" value={f.date} onChange={set('date')} options={Object.entries(DATES).map(([k, v]) => [k, v[0]])} />
           <Select label="Tags" value={f.tag} onChange={set('tag')} options={tagOptions} dot={TARGETS[f.tag]?.color} />
-          <Select label="Dev" value={f.dev} onChange={set('dev')} options={[['all', 'All'], ...Object.keys(DEVS).map((k) => [k, DEVS[k].name])]} />
           {active > 0 && <button type="button" onClick={() => setF(NO_FILTERS)} className="text-sm text-muted hover:text-text">Clear</button>}
         </div>
         <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">

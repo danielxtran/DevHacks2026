@@ -231,10 +231,10 @@ test('R request pacing is retained across successive sweeps', async () => {
 test('rate-limit retry headers support HTTP dates and source-specific reset formats', async () => {
   const now = 1_700_000_000_000;
   const date = mockHttp([
-    new Response(null, { status: 429, headers: { 'retry-after': new Date(now + 10_000).toUTCString() } }), rPage([]),
+    new Response(null, { status: 429, headers: { 'retry-after': new Date(now + 7_000).toUTCString() } }), rPage([]),
   ], now);
   await fetchR(rBase, 10, date.runtime);
-  assert.deepEqual(date.waits, [10_000]);
+  assert.deepEqual(date.waits, [7_000]);
 
   const redditReset = mockHttp([
     new Response(null, { status: 429, headers: { 'retry-after': 'invalid', 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '4' } }), redditPage([]),

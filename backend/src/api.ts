@@ -30,16 +30,38 @@ export function createApp(options: ApiOptions) {
     } catch (error) { next(error); }
   });
 
+  app.get('/sources', async (_req, res, next) => {
+    try {
+      const result = await options.pool.query(
+        `select distinct on (source) source, status, pages, items, truncated, error,
+           started_at::text as started_at, completed_at::text as completed_at
+         from public.collection_sweeps order by source, started_at desc, id desc`,
+      );
+      res.json({ sources: result.rows });
+    } catch (error) { next(error); }
+  });
+
   app.get('/issues', async (_req, res, next) => {
     try {
       const result = await options.pool.query(
         `select i.id, i.title, i.summary, i.category::text as category, i.target, i.target_type,
            i.tags, i.first_seen_at::text as first_seen_at, i.last_seen_at::text as last_seen_at,
-           count(m.feedback_id)::integer as feedback_count
+           count(m.feedback_id)::integer as feedback_count,
+           jsonb_build_object('reddit', count(*) filter (where f.source='reddit'),
+             'r', count(*) filter (where f.source='r')) as source_counts,
+           max(f.posted_at)::text as last_feedback_at, latest.latest_run
          from public.discovered_issues i
          left join public.discovered_issue_memberships m on m.issue_id=i.id
+         left join public.feedback_posts f on f.id=m.feedback_id
+         left join lateral (
+           select jsonb_build_object('id', r.id, 'status', r.status, 'stage', r.workflow_stage,
+             'error', r.error, 'attempt', r.current_attempt, 'decision', d.decision,
+             'reviewer', d.reviewer, 'decidedAt', d.created_at, 'createdAt', r.created_at) as latest_run
+           from public.runs r left join public.human_decisions d on d.run_id=r.id
+           where r.selected_issue_id=i.id order by r.created_at desc, r.id desc limit 1
+         ) latest on true
          where i.status='active'
-         group by i.id order by i.updated_at desc, i.id`,
+         group by i.id, latest.latest_run order by i.updated_at desc, i.id`,
       );
       res.json({ issues: result.rows });
     } catch (error) { next(error); }
@@ -53,7 +75,8 @@ export function createApp(options: ApiOptions) {
            i.tags, i.first_seen_at::text as first_seen_at, i.last_seen_at::text as last_seen_at,
            coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'source', f.source, 'externalId', f.external_id,
              'kind', f.kind, 'title', f.title, 'body', f.body, 'author', f.author, 'score', f.score,
-             'postedAt', f.posted_at, 'sourceUrl', f.source_url, 'parentId', f.parent_id, 'threadId', f.thread_id))
+             'postedAt', f.posted_at, 'sourceUrl', f.source_url, 'parentId', f.parent_id, 'threadId', f.thread_id,
+             'numComments', f.num_comments) order by f.posted_at, f.id)
              filter (where f.id is not null), '[]'::jsonb) as feedback
          from public.discovered_issues i
          left join public.discovered_issue_memberships m on m.issue_id=i.id

@@ -1,6 +1,6 @@
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { usePipeline } from './store/pipeline'
-import { Button, Menu, MenuItem, StateView } from './components/ui'
+import { Button, StateView } from './components/ui'
 import ErrorBoundary from './components/ErrorBoundary'
 import RiotLogo from './components/RiotLogo'
 import { useTheme } from './hooks/useTheme'
@@ -8,8 +8,6 @@ import Board from './pages/Board'
 import List from './pages/List'
 import IssueLayout from './pages/IssueLayout'
 import IssueDetail from './pages/IssueDetail'
-import SpecWorkspace from './pages/SpecWorkspace'
-import PlaytestResults from './pages/PlaytestResults'
 
 // Riot nav: small uppercase links. Hover and selection show a translucent rounded box (as on riotgames.com);
 // the selected one also gets a red bar on the header's bottom edge.
@@ -52,23 +50,29 @@ function ThemeToggle() {
   )
 }
 
-function DemoMenu() {
-  const { state, dispatch } = usePipeline()
+function SourceHealth() {
+  const { state } = usePipeline()
+  const labels = { reddit: 'Riotdit', x: 'R' }
   return (
-    <Menu label="Demo controls" trigger={<span className="text-xs font-bold uppercase tracking-[0.1em]">Demo</span>}>
-      <MenuItem onClick={() => dispatch({ type: 'DEMO_FAIL_NEXT', value: !state.demo.failNext })}>
-        {state.demo.failNext ? '✓ ' : ''}Fail the next agent run
-      </MenuItem>
-      <MenuItem onClick={() => dispatch({ type: 'DEMO_BREAK_SOURCE', source: 'reddit' })}>Break the Reddit scraper</MenuItem>
-      <MenuItem onClick={() => dispatch({ type: 'DEMO_CLEAR' })}>Clear issues (empty state)</MenuItem>
-      <MenuItem onClick={() => dispatch({ type: 'RESET' })}>Reset demo data</MenuItem>
-    </Menu>
+    <div className="mb-6 flex flex-wrap gap-4 text-xs text-muted" aria-label="Source collection status">
+      {Object.entries(labels).map(([key, label]) => {
+        const source = state.sourceStatus[key]
+        return <p key={key} className={['error', 'incomplete'].includes(source?.state) ? 'text-warning' : ''}>
+          {label}: {source?.status ?? 'not collected yet'}
+          {source?.completedAt && ` · ${new Date(source.completedAt).toLocaleString()}`}
+          {source?.message && ` · ${source.message}`}
+        </p>
+      })}
+    </div>
   )
 }
 
+function UnavailableWorkflow() {
+  return <StateView kind="empty" title="Workflow artifacts are not connected yet" action={<Button to="..">Back to issue</Button>}>The live tracker does not simulate specifications, checks, or playtest results.</StateView>
+}
+
 function TopBar() {
-  const { state } = usePipeline()
-  const running = state.issues.filter((i) => i.run).length
+  const { lastUpdated, refresh } = usePipeline()
   return (
     <header className="border-b border-border">
       <div className="mx-auto flex h-[72px] max-w-6xl items-center gap-3 px-4 sm:gap-10 sm:px-6">
@@ -80,14 +84,11 @@ function TopBar() {
           <NavItem to="/list">List</NavItem>
         </nav>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
-          {running > 0 && (
-            <span className="hidden items-center gap-2 text-xs text-muted sm:flex" role="status">
-              <span aria-hidden className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-info" />
-              {running} agent{running === 1 ? '' : 's'} working
-            </span>
-          )}
+          <span className="hidden text-xs text-muted sm:block" role="status">
+            {lastUpdated ? `Updated ${new Date(lastUpdated).toLocaleTimeString()}` : 'Connecting to backend…'}
+          </span>
+          <Button size="sm" variant="ghost" onClick={refresh}>Refresh</Button>
           <ThemeToggle />
-          <DemoMenu />
         </div>
       </div>
     </header>
@@ -96,7 +97,7 @@ function TopBar() {
 
 export default function App() {
   const { pathname } = useLocation()
-  const { loadState } = usePipeline()
+  const { loadState, lastUpdated, error, refresh } = usePipeline()
   return (
     <div className="min-h-full">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-accent focus:px-3 focus:py-2">
@@ -104,30 +105,31 @@ export default function App() {
       </a>
       <TopBar />
       <main id="main" className="mx-auto max-w-6xl px-6 pb-24 pt-10">
+        {lastUpdated && <SourceHealth />}
         {loadState === 'loading' ? (
-          <StateView kind="loading" title="Loading issues from Supabase…" />
+          <StateView kind="loading" title="Loading discovered issues…" />
         ) : (
           <ErrorBoundary key={pathname}>
             {loadState === 'error' && (
               <div className="mb-6">
-                <StateView kind="error" title="Couldn’t reach Supabase">
-                  Showing the last local snapshot. Check your connection and refresh.
+                <StateView kind="error" title={lastUpdated ? 'Tracker data may be stale' : 'Couldn’t load tracker data'} action={<Button onClick={refresh}>Retry</Button>}>
+                  {error} {lastUpdated ? 'Keeping the last successful response while reconnecting.' : 'Start the backend on port 3001; no demo data is substituted.'}
                 </StateView>
               </div>
             )}
-            <Routes>
+            {(loadState !== 'error' || lastUpdated) && <Routes>
             <Route path="/" element={<Board />} />
             <Route path="/list" element={<List />} />
             {/* Old address for the List tab */}
             <Route path="/feedback" element={<Navigate to="/list" replace />} />
             <Route path="/issues/:id" element={<IssueLayout />}>
               <Route index element={<IssueDetail />} />
-              <Route path="spec" element={<SpecWorkspace />} />
-              <Route path="playtest" element={<PlaytestResults />} />
-              <Route path="verified" element={<PlaytestResults view="verified" />} />
+              <Route path="spec" element={<UnavailableWorkflow />} />
+              <Route path="playtest" element={<UnavailableWorkflow />} />
+              <Route path="verified" element={<UnavailableWorkflow />} />
             </Route>
             <Route path="*" element={<StateView kind="empty" title="Page not found" action={<Button to="/">Back to board</Button>} />} />
-            </Routes>
+            </Routes>}
           </ErrorBoundary>
         )}
       </main>

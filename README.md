@@ -48,12 +48,12 @@ Start the backend and all three frontends in one terminal:
 ./scripts/start.mjs
 ```
 
-- Pipeline UI: http://127.0.0.1:5173 (currently a browser-only prototype, not yet connected to the backend)
+- Pipeline UI: http://127.0.0.1:5173 (live, read-only Discovery board/list/evidence; refreshes every five seconds)
 - Riotdit: http://127.0.0.1:5174
 - R: http://127.0.0.1:5175
 - Backend: http://127.0.0.1:3001 (`API_PORT` may override this)
 
-The launcher does not start the Hexlab simulator. For the Development → Testing simulation flow and replays, run it in a second terminal:
+The launcher does not start the Hexlab simulator. Its code and replay dashboard are preserved, but its browser-managed workflow is not connected to the active live tracker. To run Hexlab separately:
 
 ```bash
 npm --prefix tft-clone ci
@@ -68,7 +68,7 @@ For one app, use `npm --prefix <app> run dev` instead. Launcher tests use fake a
 node --test scripts/start.test.mjs
 ```
 
-The UI's Development → Testing transition calls the Hexlab API directly through its Vite proxy. See [ui/README.md](ui/README.md) for the numeric patch contract, measured results, and demo walkthrough. This simulation path can run independently of the main backend and Supabase; its review history currently persists in the browser.
+The preserved simulator workflow calls the Hexlab API through `/hexlab-api`; its original numeric patch contract, measured results, and walkthrough are retained in [ui/SIMULATOR.md](ui/SIMULATOR.md). It can operate independently of the main backend and Supabase, with browser-local review history, but is not mounted by the current live-tracker provider.
 
 The backend loads the repository-root `.env` and binds to loopback. It uses the database URL only on the server. Starting a run also requires `BASELINE_REVISION` and exactly three `SCENARIO_MANIFEST` entries; the external baseline runner is not implemented yet, so the current backend cannot complete a run.
 
@@ -83,10 +83,13 @@ Override `RIOTDIT_BASE_URL` and `R_BASE_URL` in `backend/.env` when the apps run
 
 Sweeps rescan from the newest page, follow pagination, retain comments/replies, and respect rate-limit cooldowns. A slow source delays Discovery and the next worker iteration. `COLLECTOR_MAX_ITEMS` caps Riotdit root posts (not inline comments) and R tweets; capped or unresolved-parent results remain incomplete. Changing source URL spelling can change evidence fingerprints and trigger one-time reanalysis.
 
+The Pipeline UI reads these APIs through Vite's `/api` proxy. It needs no browser database/model credentials and does not use the old UI seed tables. Failed refreshes are shown as stale/disconnected, never replaced with prototype data. Workflow controls and results/artifacts remain unconnected; see [`ui/README.md`](ui/README.md) and the [tracker read contract](docs/contracts/tracker-http-examples.md).
+
 ## Backend interface
 
 - `GET /health` — database/source/model configuration status
-- `GET /issues` and `GET /issues/:id` — discovered issues and source evidence
+- `GET /issues` and `GET /issues/:id` — discovered issues, per-source counts, latest run/decision summary, and source evidence
+- `GET /sources` — latest actual collection sweep for each source
 - `POST /issues/:id/runs` — `{ "idempotencyKey": "..." }`; returns HTTP 202 after transactional snapshot creation
 - `GET /runs/:id` — run status, stage history, and human decision
 - `GET /runs/:id/artifacts` and `GET /artifacts/:id` — opaque-ID artifact access

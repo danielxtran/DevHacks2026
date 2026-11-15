@@ -77,8 +77,10 @@ function retryAfterMs(headers: Headers, source: Source, now: number): number {
   const raw = headers.get('retry-after')?.trim();
   if (raw) {
     if (/^\d+(?:\.\d+)?$/.test(raw)) return Number(raw) * 1000;
-    const date = Date.parse(raw);
-    if (Number.isFinite(date)) return Math.max(0, date - now);
+    if (/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(raw)) {
+      const date = Date.parse(raw);
+      if (Number.isFinite(date)) return Math.max(0, date - now);
+    }
   }
   const reset = resetAt(headers, source, now);
   return reset === null ? FALLBACK_RETRY_MS[source] : Math.max(0, reset - now);
@@ -287,6 +289,7 @@ export async function fetchReddit(baseUrl: string, maxPosts = 1000, runtime: Htt
   const normalized = new Map<string, Feedback>();
   const ids = new Map<string, string>();
   const cursors = new Set<string>();
+  const seenPosts = new Set<string>();
   let after: string | null = null;
   let postCount = 0;
   let pages = 0;
@@ -299,11 +302,12 @@ export async function fetchReddit(baseUrl: string, maxPosts = 1000, runtime: Htt
     const page = RedditListingSchema.parse(payload);
     pages++;
 
-    const remaining = maxPosts - postCount;
-    const selected = page.data.children.slice(0, Math.max(0, remaining));
-    if (selected.length < page.data.children.length) truncated = true;
-    for (const { data: post } of selected) {
-      postCount++;
+    for (const { data: post } of page.data.children) {
+      if (!seenPosts.has(post.name)) {
+        if (postCount >= maxPosts) { truncated = true; break; }
+        seenPosts.add(post.name);
+        postCount++;
+      }
       const rootId = `mr_${post.id}`;
       const postLink = riotditLink(base, post.permalink);
       addFeedback(normalized, ids, validatedFeedback({
@@ -408,6 +412,7 @@ export async function fetchR(baseUrl: string, maxPosts = 500, runtime: HttpRunti
     }
     for (const conversationId of missingConversations) {
       if (truncated) break;
+      if (tweets.size >= maxPosts || pages >= MAX_PAGES) { truncated = true; break; }
       await crawl(`conversation_id:${conversationId}`);
     }
   }
