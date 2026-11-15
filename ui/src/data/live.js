@@ -25,9 +25,10 @@ export function mapIssue(row) {
   const mergedInto = row.canonical_issue_id ?? null
   let stage = !run ? 'feedback'
     : ['accepted', 'experiment_rejected'].includes(phase) || dismissed ? 'verified'
+      : phase.startsWith('spec_') ? 'spec'
       : phase.startsWith('simulation_') || (phase === 'failed' && run.approvedSpecVersionId)
         || TESTING_STAGES.has(phase) || ['verifying', 'review', 'done'].includes(run.status) ? 'playtest'
-        : phase.startsWith('spec_') || ['spec','design','design_ready'].includes(phase)
+        : ['spec','design','design_ready'].includes(phase)
           || ['specing','implementing'].includes(run.status) ? 'spec' : 'feedback'
   let status = !run || run.status === 'queued' ? 'queued' : 'running'
   let statusLabel = run ? phase.replaceAll('_', ' ') : 'Discovered'
@@ -55,7 +56,7 @@ export function mapIssue(row) {
     statusLabel = `${run.status} · ${phase.replaceAll('_', ' ')}`
   } else if (['review', 'done'].includes(run?.status)) {
     status = 'needs_review'
-    statusLabel = 'Awaiting human decision'
+    statusLabel = phase === 'spec_review' ? 'Awaiting spec review' : 'Awaiting human decision'
   }
   return {
     id: row.id, title: row.title, summary: row.summary, category: row.category,

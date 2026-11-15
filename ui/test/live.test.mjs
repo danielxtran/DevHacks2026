@@ -74,6 +74,36 @@ test('only persisted human decisions close issues; failures and unknown states s
   assert.equal(mapIssue({ ...row, latest_run: { ...run, stage: 'spec_rejected', phase: 'spec_rejected' } }).stage, 'feedback')
 })
 
+test('explicit specification phases stay in Development before generic status fallbacks', () => {
+  for (const phase of ['spec_queued', 'spec_review', 'spec_failed']) {
+    for (const status of ['queued', 'specing', 'review', 'verifying', 'done', 'failed', 'interrupted']) {
+      const issue = mapIssue({ ...row, latest_run: { id: 'run-id', stage: 'simulation', phase, status } })
+      assert.equal(issue.stage, 'spec', `${phase} with ${status}`)
+    }
+  }
+  const review = mapIssue({ ...row, latest_run: { id: 'run-id', stage: 'spec_review', phase: 'spec_review', status: 'review' } })
+  assert.equal(review.status, 'needs_review')
+  assert.equal(review.statusLabel, 'Awaiting spec review')
+})
+
+test('simulation phases stay in Testing and finalized decisions still close issues', () => {
+  for (const [phase, status] of [['simulation_queued', 'verifying'], ['simulation_review', 'review'], ['failed', 'failed']]) {
+    const issue = mapIssue({ ...row, latest_run: {
+      id: 'run-id', stage: 'design', phase, status, approvedSpecVersionId: 'spec-id',
+    } })
+    assert.equal(issue.stage, 'playtest', phase)
+    if (phase === 'simulation_review') assert.equal(issue.statusLabel, 'Awaiting human decision')
+  }
+  for (const phase of ['accepted', 'experiment_rejected']) {
+    assert.equal(mapIssue({ ...row, latest_run: { id: 'run-id', stage: phase, phase, status: 'done' } }).stage, 'verified')
+  }
+  for (const decision of ['accept', 'reject']) {
+    assert.equal(mapIssue({ ...row, latest_run: {
+      id: 'run-id', stage: 'spec_review', phase: 'spec_review', status: 'review', decision,
+    } }).stage, 'verified')
+  }
+})
+
 test('real reply text, source links, and thread context survive mapping; unsafe links do not', () => {
   const mapped = mapFeedback(feedback)
   assert.equal(mapped.source, 'x')
