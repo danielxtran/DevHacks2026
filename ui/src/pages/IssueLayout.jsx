@@ -2,7 +2,6 @@ import { Link, Outlet, useLocation, useParams } from 'react-router-dom'
 import { useIssue } from '../store/pipeline'
 import { StatusBadge } from '../components/badges'
 import { Button, StateView } from '../components/ui'
-import { num } from '../components/format'
 
 const steps = [
   ['feedback', 'Issues', ''],
@@ -29,7 +28,7 @@ export default function IssueLayout() {
   return (
     <div>
       <p className="mb-3 text-sm text-muted">
-        <Link to="/" className="hover:text-text">← Board</Link> · {num(issue.mentions)} feedback items
+        <Link to="/" className="hover:text-text">← Board</Link>
       </p>
       <h1 className="font-display text-3xl font-bold tracking-tight md:text-4xl">{issue.title}</h1>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">
