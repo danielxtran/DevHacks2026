@@ -125,6 +125,45 @@ test('issue metadata command requires a saved revision and returns backend-owned
   assert.ok(calls.some(({ sql }) => sql.includes('insert into public.issue_activity')));
 });
 
+test('spec retry validates intent and configuration before queueing the saved job', async t => {
+  const runId = '22222222-2222-4222-8222-222222222222';
+  const jobId = '33333333-3333-4333-8333-333333333333';
+  let connections = 0;
+  const client = {
+    async query(sql: string) {
+      if (sql.includes('from public.runs')) return { rows: [{ id: runId, selected_issue_id: issueId,
+        experiment_kind: 'hexlab_numeric', lifecycle_phase: 'spec_failed', revision: 2, simulation_generation: 0 }], rowCount: 1 };
+      if (sql.includes('from public.workflow_jobs') && sql.includes('last_retry_key')) return {
+        rows: [{ id: jobId, state: 'failed', generation: 0, attempt: 1, error: 'Timed out' }], rowCount: 1,
+      };
+      return { rows: [], rowCount: 0 };
+    },
+    release() {},
+  };
+  const options = {
+    pool: { async connect() { connections++; return client; } } as unknown as Pool,
+    artifacts: {} as ArtifactStore, baselineRevision: undefined, scenarios: [],
+    sourceConfigured: true, discoveryConfigured: false, modelConfigured: false,
+  };
+  const server = createServer(createApp(options));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const retry = (body: unknown) => fetch(`http://127.0.0.1:${address.port}/runs/${runId}/spec-retry`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const body = { expectedRevision: 2, actor: 'You', idempotencyKey: 'retry-api' };
+  assert.equal((await retry({ ...body, actor: '' })).status, 400);
+  assert.equal((await retry(body)).status, 503);
+  assert.equal(connections, 0);
+  options.modelConfigured = true;
+  const response = await retry(body);
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { runId, jobId, status: 'queued' });
+  assert.equal(connections, 1);
+});
+
 test('issue metadata command rejects unknown developer IDs before opening a transaction', async (t) => {
   let connections = 0;
   const pool = { async connect() { connections++; throw new Error('unexpected database access'); } } as unknown as Pool;

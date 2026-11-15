@@ -9,9 +9,13 @@ import DiffView from '../components/DiffView'
 const ACTOR = 'You'
 const field = 'mt-1 w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm'
 const phases = {
-  spec_queued: 'Spec Writer queued', spec_review: 'Awaiting spec review', spec_failed: 'Spec Writer failed',
-  simulation_queued: 'Hexlab queued', simulation_review: 'Awaiting human review',
+  spec_queued: 'Specification queued', spec_review: 'Ready for spec review', spec_failed: 'Specification failed',
+  simulation_queued: 'Simulation queued', simulation_review: 'Ready for simulation review',
   failed: 'Simulation failed', accepted: 'Accepted', experiment_rejected: 'Experiment rejected', spec_rejected: 'Spec rejected',
+}
+const simulationStates = {
+  queued: 'Simulation queued', running: 'Running Hexlab comparison…', succeeded: 'Simulation complete',
+  failed: 'Simulation failed', interrupted: 'Simulation interrupted', retired: 'Historical simulation',
 }
 const stampId = value => value ? new Date(value).toLocaleString() : '—'
 
@@ -90,7 +94,14 @@ function SpecView({ issue, bundle, search, setSearch, command }) {
   const patch = selected?.numeric_patch ?? []
   const editable = selected?.id === current?.id
   const capabilities = run.capabilities ?? {}
-  const job = [...(bundle.jobs ?? [])].reverse().find(item => item.state === 'queued' || item.state === 'running')
+  const job = [...(bundle.jobs ?? [])].reverse().find(item =>
+    ['spec_initial', 'spec_revision'].includes(item.kind) && ['queued', 'running'].includes(item.state))
+  const specPending = run.lifecycle_phase === 'spec_queued'
+  const specFailed = run.lifecycle_phase === 'spec_failed'
+  const specStatus = specPending
+    ? job?.state === 'running' ? 'Writing specification…' : phases.spec_queued
+    : run.lifecycle_phase.startsWith('spec_') ? phases[run.lifecycle_phase]
+      : current?.approved ? 'Specification approved' : 'Specification saved'
 
   const send = async (name, path, method, body, idempotent = false) => {
     setBusy(true); setError(null); setMessage(null)
@@ -150,10 +161,16 @@ function SpecView({ issue, bundle, search, setSearch, command }) {
   return (
     <div className="space-y-8">
       <RunHistory issue={issue} run={run} setSearch={setSearch} />
-      <Section title="Development" right={<span className="text-sm text-muted">{phases[run.lifecycle_phase] ?? run.lifecycle_phase}</span>}>
-        <p className="text-sm text-muted">This is a backend-owned experiment. Spec text is narrative; the numeric patch is the only executable input.</p>
-        {run.error && <p role="alert" className="mt-3 text-sm text-warning">{run.error}</p>}
-        {job && <p className="mt-3 text-sm text-info" role="status">Spec Writer · {job.state}{job.error ? ` · ${job.error}` : ''}</p>}
+      <Section title="Development" right={<span className="text-sm text-muted">{specStatus}</span>}>
+        <p className="text-sm text-muted">Review the specification and numeric patch, then approve them to start a Hexlab comparison in Testing.</p>
+        {specFailed && versions.length > 0 && <p role="alert" className="mt-3 text-sm text-warning">Specification could not be generated: {run.error ?? 'No additional details.'} Your saved version is still available below.</p>}
+        {run.lifecycle_phase === 'spec_failed' && <div className="mt-3">
+          <Button disabled={busy || !capabilities.retrySpec?.enabled} onClick={() => void send('retry-spec', `/runs/${run.id}/spec-retry`, 'POST', {
+            expectedRevision: run.revision, actor: ACTOR,
+          }, true)}>Retry development</Button>
+          <p className="mt-2 text-xs text-muted">{capabilities.retrySpec?.reason ?? 'Retries the Spec Writer with the saved inputs. This may incur model charges.'}</p>
+        </div>}
+        {specPending && versions.length > 0 && <p className="mt-3 text-sm text-info" role="status">{specStatus} Your saved version is shown below.</p>}
         {versions.length > 0 ? (
           <div className="mt-6 space-y-6">
             <label className="flex flex-wrap items-center gap-3 text-sm text-muted">Saved spec version
@@ -210,7 +227,16 @@ function SpecView({ issue, bundle, search, setSearch, command }) {
               </form>
             </div>}
           </div>
-        ) : <StateView kind={run.status === 'failed' ? 'error' : 'loading'} title={run.status === 'failed' ? 'Specification unavailable' : 'Waiting for the Spec Writer'}>{run.status === 'failed' ? 'The failure is saved and visible above.' : 'The queued model job will save its output here when complete.'}</StateView>}
+        ) : <StateView
+          kind={specFailed ? 'error' : specPending ? 'loading' : 'empty'}
+          title={specFailed ? 'Specification could not be generated' : specPending ? specStatus : 'No specification yet'}
+        >
+          {specFailed ? run.error ?? 'Retry development to try generating the specification again.'
+            : specPending ? job?.state === 'running'
+              ? 'The Spec Writer is preparing the specification and numeric patch. Testing starts only after you review and approve them.'
+              : 'Waiting for the Spec Writer to start. Testing has not started.'
+            : 'There is no saved specification for this experiment.'}
+        </StateView>}
       </Section>
       <CommandStatus busy={busy} error={error} message={message} />
     </div>
@@ -286,19 +312,29 @@ function TestingView({ issue, bundle, search, setSearch, command, mode: viewMode
   if (!run) return <StateView kind="empty" title="No experiment selected" action={<Link className="underline" to={`/issues/${issue.id}/spec`}>Open Development</Link>} />
 
   const completed = simulations.filter(item => item.state === 'succeeded')
+  const testingStatus = selected ? simulationStates[selected.state] ?? selected.state
+    : run.lifecycle_phase === 'simulation_queued' ? phases.simulation_queued
+      : run.lifecycle_phase === 'failed' ? phases.failed : 'Not started'
+  const finalStatus = decision ? decision.decision === 'accept' ? 'Accepted' : 'Rejected experiment' : 'No final decision'
   return (
     <div className="space-y-8">
       <RunHistory issue={issue} run={run} setSearch={setSearch} />
-      <Section title={viewMode === 'verified' ? 'Final review' : 'Testing'} right={<span className="text-sm text-muted">{phases[run.lifecycle_phase] ?? run.lifecycle_phase}</span>}>
-        {run.error && <p role="alert" className="text-sm text-warning">{run.error}</p>}
+      <Section title={viewMode === 'verified' ? 'Final review' : 'Testing'} right={<span className="text-sm text-muted">{viewMode === 'verified' ? finalStatus : testingStatus}</span>}>
         {simulations.length > 0 && <label className="mb-5 flex flex-wrap items-center gap-3 text-sm text-muted">Saved simulation
           <select className="select-pill" value={selected?.id ?? ''} onChange={event => setSimulation(event.target.value)}>
-            {simulations.map(item => <option key={item.id} value={item.id}>{item.state} · {Number(item.battles).toLocaleString()} battles · {stampId(item.created_at)}</option>)}
+            {simulations.map(item => <option key={item.id} value={item.id}>{simulationStates[item.state] ?? item.state} · {Number(item.battles).toLocaleString()} battles · {stampId(item.created_at)}</option>)}
           </select>
         </label>}
-        {!selected && <StateView kind={['simulation_queued'].includes(run.lifecycle_phase) ? 'loading' : 'empty'} title={run.lifecycle_phase === 'simulation_queued' ? 'Waiting for Hexlab' : 'No measured simulation yet'}>Approved requests and their status are saved by the backend. Results appear here only after validation.</StateView>}
-        {selected?.state === 'queued' || selected?.state === 'running' ? <StateView kind="loading" title={`Hexlab ${selected.state}`}>Comparing {Number(selected.battles).toLocaleString()} paired battles per configuration with seed {selected.seed}.</StateView> : null}
-        {selected?.state === 'failed' || selected?.state === 'interrupted' ? <p className="text-sm text-warning">Simulation {selected.state}: {selected.error ?? 'No additional details.'}</p> : null}
+        {!selected && <StateView
+          kind={run.lifecycle_phase === 'failed' ? 'error' : run.lifecycle_phase === 'simulation_queued' ? 'loading' : 'empty'}
+          title={run.lifecycle_phase === 'failed' ? 'Simulation could not complete' : run.lifecycle_phase === 'simulation_queued' ? 'Simulation queued' : 'Testing has not started'}
+        >
+          {run.lifecycle_phase === 'failed' ? run.error ?? 'Return to Development to review the patch before trying again.'
+            : run.lifecycle_phase === 'simulation_queued' ? 'The approved comparison is waiting for Hexlab to start.'
+              : 'Review and approve the specification in Development before running a Hexlab comparison.'}
+        </StateView>}
+        {selected?.state === 'queued' || selected?.state === 'running' ? <StateView kind="loading" title={simulationStates[selected.state]}>{selected.state === 'queued' ? 'Waiting for Hexlab to start. It will compare' : 'Comparing'} {Number(selected.battles).toLocaleString()} paired battles per configuration with seed {selected.seed}.</StateView> : null}
+        {selected?.state === 'failed' || selected?.state === 'interrupted' ? <p role="alert" className="text-sm text-warning">{simulationStates[selected.state]}: {selected.error ?? 'No additional details.'}</p> : null}
         {selected?.state === 'succeeded' && <SimulationResults playtest={asPlaytest({ ...selected, version_number: bundle.versions?.find(version => version.id === selected.spec_version_id)?.version_number })} />}
         {viewMode !== 'verified' && ['simulation_review', 'failed'].includes(run.lifecycle_phase) && <form className="flex flex-wrap items-end gap-3 border-t border-border pt-5" onSubmit={rerun}>
           <label className="text-sm text-muted">Rerun with more battles<select className={field} value={battles} onChange={event => setBattles(Number(event.target.value))}>{[100, 1000, 5000, 10000].map(value => <option key={value} value={value}>{value.toLocaleString()}</option>)}</select></label>

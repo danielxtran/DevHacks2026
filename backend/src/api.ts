@@ -5,11 +5,11 @@ import { ArtifactStore } from './artifact-store.js';
 import { HumanDecisionSchema, IssueCommentRequestSchema, IssueDismissRequestSchema, IssueMergeRequestSchema,
   IssueMetadataRequestSchema, IssueRestoreRequestSchema, NumericDecisionRequestSchema, ReturnToDevelopmentRequestSchema,
   RunStatusSchema, SimulationQueueRequestSchema, SimulationRetryRequestSchema, SpecApprovalRequestSchema,
-  SpecEditRequestSchema, SpecRejectionRequestSchema, SpecRevisionRequestSchema, StartRunRequestSchema } from './contracts.js';
+  SpecEditRequestSchema, SpecRejectionRequestSchema, SpecRetryRequestSchema, SpecRevisionRequestSchema, StartRunRequestSchema } from './contracts.js';
 import { validateHexlabConfig } from './hexlab.js';
 import { addIssueComment, ConflictError, dismissIssue, mergeIssues, NotFoundError, recordDecision, restoreIssue,
   approveNumericSpec, queueSimulationRerun, queueSpecRevision, recordNumericDecision, rejectNumericSpec,
-  resumeRun, returnNumericExperimentToDevelopment, retryHexlabSimulation, saveSpecVersion, startNumericExperiment,
+  resumeRun, returnNumericExperimentToDevelopment, retryHexlabSimulation, retryNumericSpecification, saveSpecVersion, startNumericExperiment,
   updateIssueMetadata } from './repository.js';
 
 const uuid = z.string().uuid();
@@ -218,6 +218,8 @@ export function createApp(options: ApiOptions) {
                 r.engine_id, r.current_spec_version_id, r.approved_spec_version_id, r.simulation_generation,
                 to_json(r.created_at) as created_at, r.started_at::text as started_at, r.finished_at::text as finished_at,
                 r.current_attempt,
+                (select j.attempt from public.workflow_jobs j where j.run_id=r.id
+                   and j.kind in ('spec_initial','spec_revision') order by j.created_at desc,j.id desc limit 1) as spec_attempts,
                 (select jsonb_agg(jsonb_build_object('stage',e.stage,'status',e.status,'error',e.error,
                    'startedAt',e.started_at,'completedAt',e.completed_at) order by e.id)
                  from public.run_stage_events e where e.run_id=r.id) as stages,
@@ -230,6 +232,13 @@ export function createApp(options: ApiOptions) {
       const { stages, decision, ...run } = result.rows[0]!;
       res.json({ run: RunStatusSchema.parse(run), stages: stages ?? [], decision: decision ?? null,
         capabilities: {
+          retrySpec: {
+            enabled: Boolean(options.modelConfigured && run.experiment_kind === 'hexlab_numeric'
+              && run.lifecycle_phase === 'spec_failed' && run.spec_attempts < 3),
+            reason: !options.modelConfigured ? 'Set OPENAI_API_KEY and OPENAI_MODEL on the backend.'
+              : run.spec_attempts >= 3 ? 'The Spec Writer reached its three-attempt limit.'
+                : run.lifecycle_phase !== 'spec_failed' ? 'The specification has not failed.' : null,
+          },
           editSpec: { enabled: run.experiment_kind === 'hexlab_numeric' && run.lifecycle_phase === 'spec_review', reason: run.lifecycle_phase === 'spec_review' ? null : 'The experiment is not in spec review.' },
           approveSpec: { enabled: Boolean(options.getHexlabConfig && run.lifecycle_phase === 'spec_review'), reason: !options.getHexlabConfig ? 'Hexlab is not configured.' : run.lifecycle_phase === 'spec_review' ? null : 'The experiment is not in spec review.' },
           simulation: { enabled: Boolean(options.getHexlabConfig), reason: options.getHexlabConfig ? null : 'Hexlab is not configured.' },
@@ -291,6 +300,19 @@ export function createApp(options: ApiOptions) {
       if (error instanceof Error && error.message === 'artifact_not_found') error = new NotFoundError('artifact_not_found');
       next(error);
     }
+  });
+
+  app.post('/runs/:runId/spec-retry', async (req, res, next) => {
+    try {
+      const runId = uuid.parse(req.params.runId);
+      const command = SpecRetryRequestSchema.parse(req.body);
+      if (!options.modelConfigured) {
+        res.status(503).json({ error: 'spec_writer_not_configured', detail: 'Set OPENAI_API_KEY and OPENAI_MODEL on the backend.' });
+        return;
+      }
+      const { jobId } = await retryNumericSpecification(options.pool, runId, command);
+      res.status(202).json({ runId, jobId, status: 'queued' });
+    } catch (error) { next(error); }
   });
 
   app.post('/runs/:runId/spec-revisions', async (req, res, next) => {

@@ -3,7 +3,7 @@ import type { FunctionTool } from 'openai/resources/responses/responses';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { ArtifactStore } from './artifact-store.js';
-import { NumericDesignOutputSchema } from './contracts.js';
+import { NumericDesignOutputSchema, SpecRevisionRequestSchema } from './contracts.js';
 import type { z } from 'zod';
 import { canonicalNumericPatch, HexlabClient, validateHexlabConfig, type NumericChange, type SimulationInput } from './hexlab.js';
 
@@ -129,6 +129,7 @@ export class WorkflowJobWorker {
       if (!parent) throw new Error('The requested parent specification no longer exists.');
     }
     const evidence = frozenFeedback.rows.map(({ payload }) => payload);
+    const revisionPrompt = job.kind === 'spec_revision' ? SpecRevisionRequestSchema.shape.prompt.parse(job.input.prompt) : null;
     const prompt = JSON.stringify({
       issue: { id: run.issue_id, target: run.target, evidenceSummary: run.issue_evidence },
       frozenPlayerEvidence: evidence.map(row => ({
@@ -139,7 +140,7 @@ export class WorkflowJobWorker {
       baseline: { baselineConfigId: baseline.baselineConfigId, engineId: baseline.engineId,
         champions: baseline.champions, items: baseline.items, monsters: baseline.monsters },
       parentSpec: parent,
-      requestedChanges: job.kind === 'spec_revision' ? job.input.prompt : null,
+      requestedChanges: revisionPrompt,
     });
     const promptHash = createHash('sha256').update(prompt).digest('hex');
     const started = Date.now();
@@ -169,7 +170,7 @@ export class WorkflowJobWorker {
          values ($1,'spec_writer',$2,$3,$4,$5,true,null) returning id`,
         [job.run_id, promptHash, Date.now() - started, response.usage?.input_tokens ?? null, response.usage?.output_tokens ?? null],
       );
-      await this.saveSpecification(job, parent, output, numericPatch, prompt, log.rows[0]?.id, (artifact as { id: string }).id);
+      await this.saveSpecification(job, parent, output, numericPatch, revisionPrompt, log.rows[0]?.id, (artifact as { id: string }).id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.pool.query(
@@ -181,7 +182,7 @@ export class WorkflowJobWorker {
   }
 
   private async saveSpecification(job: ClaimedJob, parent: Record<string, any> | null,
-    output: z.infer<typeof NumericDesignOutputSchema>, numericPatch: NumericChange[], prompt: string,
+    output: z.infer<typeof NumericDesignOutputSchema>, numericPatch: NumericChange[], revisionPrompt: string | null,
     modelCallId: string | undefined, artifactId: string): Promise<void> {
     const db = await this.pool.connect();
     try {
@@ -207,7 +208,7 @@ export class WorkflowJobWorker {
           evidenceRationale: output.evidenceRationale, evidenceIds: output.evidenceIds,
           intendedChanges: output.intendedChanges, preservedBehavior: output.preservedBehavior,
           successCriteria: output.successCriteria, unsupportedReason: output.unsupportedReason,
-        }), JSON.stringify(numericPatch), prompt, JSON.stringify(output), modelCallId ?? null, artifactId],
+        }), JSON.stringify(numericPatch), revisionPrompt, JSON.stringify(output), modelCallId ?? null, artifactId],
       );
       await db.query("update public.workflow_jobs set state='succeeded',result=$2::jsonb,completed_at=now(),error=null where id=$1",
         [job.id, JSON.stringify({ specVersionId: version.rows[0]!.id, version: version.rows[0]!.version_number })]);

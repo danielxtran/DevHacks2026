@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { NumericPatchSchema, SpecApprovalRequestSchema, SpecEditRequestSchema, SpecRevisionRequestSchema,
-  SimulationQueueRequestSchema, type Feedback, type StartRunRequestSchema } from './contracts.js';
+  SimulationQueueRequestSchema, SpecRetryRequestSchema, type Feedback, type StartRunRequestSchema } from './contracts.js';
 import { canonicalNumericPatch, validateHexlabConfig, validateSimulationResult, type HexlabConfig, type NumericChange } from './hexlab.js';
 import { fingerprintFeedback } from './collectors.js';
 import type { z } from 'zod';
@@ -387,7 +387,7 @@ interface NumericRunRow extends Record<string, unknown> {
   engine_id: string; status: string;
 }
 
-async function lockNumericRun(client: PoolClient, runId: string, expectedRevision: number): Promise<NumericRunRow> {
+async function lockNumericRun(client: PoolClient, runId: string, expectedRevision?: number): Promise<NumericRunRow> {
   const result = await client.query<NumericRunRow>(
     `select id,selected_issue_id,experiment_kind,lifecycle_phase,revision,simulation_generation,
         current_spec_version_id,approved_spec_version_id,baseline_config_id,baseline_config,engine_id,status::text as status
@@ -396,7 +396,7 @@ async function lockNumericRun(client: PoolClient, runId: string, expectedRevisio
   if (!result.rowCount) throw new NotFoundError('run_not_found');
   const run = result.rows[0]!;
   if (run.experiment_kind !== 'hexlab_numeric') throw new ConflictError('not_numeric_experiment');
-  if (run.revision !== expectedRevision) throw new ConflictError('run_revision_conflict');
+  if (expectedRevision !== undefined && run.revision !== expectedRevision) throw new ConflictError('run_revision_conflict');
   return run;
 }
 
@@ -454,6 +454,54 @@ export async function queueSpecRevision(pool: Pool, runId: string, command: z.in
       { runId, requestedRevision: true, prompt: command.prompt });
     await client.query('commit');
     return { jobId: inserted.rows[0]!.id };
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  } finally { client.release(); }
+}
+
+export async function retryNumericSpecification(pool: Pool, runId: string, command: z.infer<typeof SpecRetryRequestSchema>): Promise<{ jobId: string }> {
+  const client = await pool.connect();
+  const hash = requestHash([runId, command.actor, command.expectedRevision]);
+  try {
+    await client.query('begin');
+    const run = await lockNumericRun(client, runId);
+    const result = await client.query<{
+      id: string; state: string; generation: number; attempt: number; error: string | null;
+      last_retry_key: string | null; last_retry_hash: string | null;
+    }>(
+      `select id,state,generation,attempt,error,last_retry_key,last_retry_hash from public.workflow_jobs
+       where run_id=$1 and kind in ('spec_initial','spec_revision')
+       order by created_at desc,id desc limit 1 for update`, [runId],
+    );
+    const job = result.rows[0];
+    if (!job) throw new ConflictError('spec_job_not_found');
+    if (job.last_retry_key === command.idempotencyKey) {
+      if (job.last_retry_hash !== hash) throw new ConflictError('idempotency_conflict');
+      await client.query('commit');
+      return { jobId: job.id };
+    }
+    if (run.revision !== command.expectedRevision) throw new ConflictError('run_revision_conflict');
+    if (run.lifecycle_phase !== 'spec_failed' || !['failed', 'interrupted'].includes(job.state)) {
+      throw new ConflictError('spec_not_retryable');
+    }
+    if (job.generation !== run.simulation_generation) throw new ConflictError('spec_generation_retired');
+    if (job.attempt >= 3) throw new ConflictError('spec_retry_limit_reached');
+    await assertNoActiveJob(client, runId);
+    const generation = run.simulation_generation + 1;
+    await client.query(
+      `update public.workflow_jobs set state='queued',generation=$2,max_attempts=3,error=null,
+         started_at=null,completed_at=null,claimed_by=null,last_retry_key=$3,last_retry_hash=$4 where id=$1`,
+      [job.id, generation, command.idempotencyKey, hash],
+    );
+    await client.query(
+      `update public.runs set simulation_generation=$2,lifecycle_phase='spec_queued',workflow_stage='spec_queued',
+         status='queued',error=null,finished_at=null,revision=revision+1 where id=$1`, [runId, generation],
+    );
+    await appendIssueActivity(client, run.selected_issue_id, 'spec_version_saved', command.actor,
+      'Retrying Spec Writer.', { runId, jobId: job.id, attempt: job.attempt, previousError: job.error });
+    await client.query('commit');
+    return { jobId: job.id };
   } catch (error) {
     await client.query('rollback');
     throw error;

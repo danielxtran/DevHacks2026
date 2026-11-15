@@ -76,6 +76,8 @@ The full walkthrough is in **[Getting started](docs/getting-started.md)**.
 5. **Simulate.** Approving the spec queues a Hexlab job. Baseline and patched configurations play exactly the same seeded matchups, and the result is checked against the request before it is saved.
 6. **Decide.** A reviewer accepts or rejects the experiment against a specific spec version and simulation. Finishing a run does not count as accepting it.
 
+Failed Spec Writer jobs expose **Retry development** on the issue and Development pages. `POST /runs/:id/spec-retry` reuses saved inputs in the same experiment, with a three-attempt limit; retries may incur model charges.
+
 The lifecycle, its guards, and how retries work are covered in **[Experiment workflow](docs/workflow.md)**.
 
 ## Documentation

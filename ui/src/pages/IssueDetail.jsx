@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { usePipeline } from '../store/pipeline'
 import { DEVS, devLabel } from '../data/constants'
@@ -19,7 +19,10 @@ function IssueControls({ issue }) {
   const [canonicalId, setCanonicalId] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [startKey, setStartKey] = useState(null)
+  const startRequest = useRef(null)
+  const [startFailed, setStartFailed] = useState(false)
+  const latestRun = state.workflow?.run
+  const failedRun = latestRun?.id === issue.backendRun?.id && latestRun?.lifecycle_phase === 'spec_failed' ? latestRun : null
   const merged = issue.triageState === 'merged'
   const openIssues = state.issues.filter(item => item.id !== issue.id && item.triageState === 'open')
 
@@ -46,15 +49,19 @@ function IssueControls({ issue }) {
     })
   }
   const start = async () => {
-    const key = startKey ?? crypto.randomUUID()
-    if (!startKey) setStartKey(key)
+    const path = failedRun ? `/runs/${failedRun.id}/spec-retry` : `/issues/${issue.id}/runs`
+    const body = { actor, ...(failedRun ? { expectedRevision: failedRun.revision } : {}) }
+    const payload = JSON.stringify([path, body])
+    if (startRequest.current?.payload !== payload) startRequest.current = { payload, key: crypto.randomUUID() }
+    const key = startRequest.current.key
     await submit(async () => {
       try {
-        const result = await command(`/issues/${issue.id}/runs`, 'POST', { idempotencyKey: key, actor })
-        setStartKey(null)
-        navigate(`/issues/${issue.id}/spec?run=${encodeURIComponent(result.run.id)}`)
+        const result = await command(path, 'POST', { ...body, idempotencyKey: key })
+        startRequest.current = null
+        setStartFailed(false)
+        navigate(`/issues/${issue.id}/spec?run=${encodeURIComponent(result.runId ?? result.run.id)}`)
       } catch (failure) {
-        if (/^\d{3}:/.test(failure.message)) setStartKey(null)
+        setStartFailed(true)
         throw failure
       }
     })
@@ -75,9 +82,9 @@ function IssueControls({ issue }) {
       expectedRevision: issue.revision, expectedCanonicalRevision: target.revision, canonicalIssueId: target.id, actor,
     }))
   }
-  const capability = state.capabilities.startExperiment
-  const canStart = !merged && issue.triageState !== 'dismissed' && Boolean(issue.assignedDeveloper)
-    && ['feedback', 'verified'].includes(issue.stage) && capability?.enabled
+  const capability = failedRun ? failedRun.capabilities?.retrySpec : state.capabilities.startExperiment
+  const canStart = !merged && issue.triageState !== 'dismissed' && capability?.enabled
+    && (failedRun || (Boolean(issue.assignedDeveloper) && ['feedback', 'verified'].includes(issue.stage)))
 
   return (
     <aside className="space-y-8 text-sm">
@@ -109,9 +116,9 @@ function IssueControls({ issue }) {
             </form>
             <div className="border-t border-border pt-3">
               <Button size="sm" variant="primary" onClick={() => void start()} disabled={busy || !canStart}>
-                Push to development →
+                {failedRun || startFailed ? 'Retry development' : 'Push to development →'}
               </Button>
-              {!canStart && <p className="mt-2 text-xs text-muted">{issue.triageState === 'dismissed' ? 'Restore this issue first.' : !issue.assignedDeveloper ? 'Assign a developer before starting.' : capability?.reason ?? 'An experiment is already active or this issue is closed.'}</p>}
+              {!canStart && <p className="mt-2 text-xs text-muted">{issue.triageState === 'dismissed' ? 'Restore this issue first.' : !failedRun && !issue.assignedDeveloper ? 'Assign a developer before starting.' : capability?.reason ?? 'An experiment is already active or this issue is closed.'}</p>}
             </div>
           </div>
         )}

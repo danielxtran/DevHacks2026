@@ -158,6 +158,7 @@ export const SpecRejectionRequestSchema = RunRevisionSchema.extend({
 export const SimulationQueueRequestSchema = RunRevisionSchema.extend({
   idempotencyKey: z.string().trim().min(1).max(200), battles: z.union([z.literal(100), z.literal(1000), z.literal(5000), z.literal(10000)]),
 }).strict();
+export const SpecRetryRequestSchema = RunRevisionSchema.extend({ idempotencyKey: z.string().trim().min(1).max(200) }).strict();
 export const SimulationRetryRequestSchema = RunRevisionSchema.extend({ idempotencyKey: z.string().trim().min(1).max(200) }).strict();
 export const ReturnToDevelopmentRequestSchema = RunRevisionSchema.extend({ reason: z.string().trim().min(1).max(2000) }).strict();
 export const NumericDecisionRequestSchema = RunRevisionSchema.extend({

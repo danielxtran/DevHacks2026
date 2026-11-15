@@ -37,6 +37,19 @@ select to_regclass('public.workflow_jobs'), to_regclass('public.hexlab_simulatio
 
 Apply only the migrations that are missing, one at a time, in order.
 
+### Hosted application receipt
+
+Applied through Supabase MCP to project `qaweuqazcpyvmqbfcgzq` after inspecting schema/history:
+
+| Repository SQL | Hosted version | Hosted name |
+|---|---|---|
+| `0005_backend_workflow.sql` | `20261114223858` | `backend_workflow` |
+| `0006_agent_artifact_links.sql` | `20261114223903` | `agent_artifact_links` |
+| `0007_issue_collaboration.sql` | `20261115040853` | `issue_collaboration` |
+| `0008_numeric_experiments.sql` | `20261115040908` | `numeric_experiments` |
+
+`0001`–`0004` were not replayed or marked applied. Hosted versions differ from the short local filenames: reconcile history before using CLI `db push`. Post-apply checks confirmed schema, foreign keys, RLS, restricted anon access, and required server grants. Existing counts were unchanged at application time (21 discovered issues, 1 run, 0 decisions); no model call was made as part of applying migrations.
+
 ## Writing a new migration
 
 - Name it `NNNN_short_description.sql`, using the next number
