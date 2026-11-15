@@ -5,13 +5,13 @@ import { applyPatch, configIdentifier, simulationRequestSchema, validateSimulati
 import { generateMatchups } from '../simulation/matchups';
 
 /** What Patchwork links to: the exact request Hexlab evaluated, bound to its baseline fingerprint. */
-export interface ReplayExperiment { request: SimulationRequest & { mode: 'pvp' | 'pve' }; baselineConfigId: string }
+export interface ReplayExperiment { request: SimulationRequest & { mode: 'pvp' | 'pve' }; baselineConfigId: string; engineId: string }
 export interface ReplayLink { experiment: ReplayExperiment; game?: number; focus?: string }
 
-const linkSchema = simulationRequestSchema.extend({ baselineConfigId: z.string().min(1).max(120) }).strict();
+const linkSchema = simulationRequestSchema.extend({ baselineConfigId: z.string().min(1).max(120), engineId: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 
 /** Parse `?replay=<json>&game=<1-based>&focus=<championId>`. Returns null when no replay is requested. */
-export function parseReplayLink(search: string, config: GameConfig): ReplayLink | null {
+export function parseReplayLink(search: string, config: GameConfig, currentEngineId: string): ReplayLink | null {
   const params = new URLSearchParams(search);
   const raw = params.get('replay');
   if (raw === null) return null;
@@ -19,15 +19,16 @@ export function parseReplayLink(search: string, config: GameConfig): ReplayLink 
   try { json = JSON.parse(raw); } catch { throw new Error('The replay link is not valid JSON. Open it again from Patchwork.'); }
   const parsed = linkSchema.safeParse(json);
   if (!parsed.success) throw new Error('The replay link does not describe a valid Hexlab experiment.');
-  const { baselineConfigId, ...rest } = parsed.data;
+  const { baselineConfigId, engineId, ...rest } = parsed.data;
   const request = { ...validateSimulationRequest(rest, config), mode: rest.mode ?? 'pvp' } as ReplayExperiment['request'];
   if (baselineConfigId !== configIdentifier(config)) {
     throw new Error(`This experiment ran on baseline ${baselineConfigId}, but this Hexlab build uses ${configIdentifier(config)}. Replays would not match the measured results.`);
   }
+  if (engineId !== currentEngineId) throw new Error(`This experiment ran on engine ${engineId}, but this Hexlab renderer uses ${currentEngineId}. Replays would not match the measured results.`);
   const game = Number(params.get('game'));
   const focus = params.get('focus') ?? undefined;
   return {
-    experiment: { request, baselineConfigId },
+    experiment: { request, baselineConfigId, engineId },
     ...(Number.isInteger(game) && game >= 1 && game <= request.simulations ? { game } : {}),
     ...(focus && Object.hasOwn(config.champions, focus) ? { focus } : {}),
   };

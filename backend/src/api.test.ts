@@ -60,3 +60,87 @@ test('tracker read endpoints expose Discovery, real source counts, run identity,
   assert.equal(invalid.status, 400);
   assert.equal(calls.length, 3);
 });
+
+test('run reads serialize PostgreSQL timestamps as ISO datetimes', async (t) => {
+  const runId = '22222222-2222-4222-8222-222222222222';
+  const createdAt = '2026-11-15T04:25:38.667244+00:00';
+  const pool = {
+    async query(sql: string) {
+      assert.match(sql, /to_json\(r\.created_at\) as created_at/);
+      return { rows: [{
+        id: runId, status: 'failed', workflow_stage: 'spec_failed', error: null,
+        baseline_revision: null, candidate_revision: null, created_at: createdAt,
+      }], rowCount: 1 };
+    },
+  } as unknown as Pool;
+  const server = createServer(createApp({
+    pool, artifacts: {} as ArtifactStore, baselineRevision: undefined, scenarios: [],
+    sourceConfigured: true, discoveryConfigured: false,
+  }));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const response = await fetch(`http://127.0.0.1:${address.port}/runs/${runId}`);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json() as { run: { created_at: string } }).run.created_at, createdAt);
+});
+
+test('issue metadata command requires a saved revision and returns backend-owned values', async (t) => {
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const issue = {
+    id: issueId, title: 'Long stuns', summary: 'Players report lost actions.', category: 'feels_bad',
+    tags: ['combat'], triage_state: 'open', revision: 4, assigned_developer: null,
+    human_title: null, human_tags: null,
+  };
+  const client = {
+    async query(sql: string, params: unknown[] = []) {
+      calls.push({ sql, params });
+      if (sql === 'begin' || sql === 'commit') return { rows: [], rowCount: 0 };
+      if (sql.includes('from public.discovered_issues') && sql.includes('for update')) return { rows: [issue], rowCount: 1 };
+      if (sql.includes('update public.discovered_issues')) return {
+        rows: [{ ...issue, revision: 5, assigned_developer: 'jun', human_title: 'Stun lock' }], rowCount: 1,
+      };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const pool = { connect: async () => client } as unknown as Pool;
+  const app = createApp({
+    pool, artifacts: {} as ArtifactStore, baselineRevision: undefined, scenarios: [],
+    sourceConfigured: true, discoveryConfigured: false,
+  });
+  const server = createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const response = await fetch(`http://127.0.0.1:${address.port}/issues/${issueId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedRevision: 4, actor: 'Tony', developer: 'jun', title: 'Stun lock' }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { issue: { ...issue, revision: 5, assigned_developer: 'jun', human_title: 'Stun lock' } });
+  assert.deepEqual(calls[1]!.params, [issueId]);
+  assert.ok(calls.some(({ sql }) => sql.includes('insert into public.issue_activity')));
+});
+
+test('issue metadata command rejects unknown developer IDs before opening a transaction', async (t) => {
+  let connections = 0;
+  const pool = { async connect() { connections++; throw new Error('unexpected database access'); } } as unknown as Pool;
+  const app = createApp({
+    pool, artifacts: {} as ArtifactStore, baselineRevision: undefined, scenarios: [],
+    sourceConfigured: true, discoveryConfigured: false,
+  });
+  const server = createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const response = await fetch(`http://127.0.0.1:${address.port}/issues/${issueId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedRevision: 4, actor: 'Tony', developer: 'unknown' }),
+  });
+  assert.equal(response.status, 400);
+  assert.equal(connections, 0);
+});

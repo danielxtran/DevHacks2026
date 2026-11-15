@@ -58,33 +58,44 @@ async function main() {
   const env = { ...await envFile(join(root, '.env')), ...await envFile(join(root, 'backend', '.env')), ...process.env };
   const backendPort = Number(env.API_PORT || 3001);
   if (!Number.isInteger(backendPort) || backendPort < 1 || backendPort > 65535) throw new Error('API_PORT must be an integer from 1 to 65535.');
+  const hexlabUrl = new URL(env.HEXLAB_API_URL || 'http://127.0.0.1:3002/api');
+  if (hexlabUrl.protocol !== 'http:' || !['127.0.0.1', '::1', 'localhost'].includes(hexlabUrl.hostname) || hexlabUrl.username || hexlabUrl.password) {
+    throw new Error('HEXLAB_API_URL must be an unauthenticated HTTP URL on loopback.');
+  }
+  const hexlabPort = Number(hexlabUrl.port || 3002);
+  if (!Number.isInteger(hexlabPort) || hexlabPort < 1 || hexlabPort > 65535) throw new Error('HEXLAB_API_URL must use a valid local port.');
   const apps = [
     { name: 'backend', port: backendPort, bin: 'tsx', args: [] },
     { name: 'ui', port: 5173, bin: 'vite', args: ['--', '--host', '127.0.0.1'] },
     { name: 'mockreddit', port: 5174, bin: 'vite', args: ['--', '--host', '127.0.0.1'] },
     { name: 'mockr', port: 5175, bin: 'vite', args: ['--', '--host', '127.0.0.1'] },
+    { name: 'hexlab', dir: 'tft-clone', port: hexlabPort, extraPorts: [5176], bin: 'concurrently', script: 'dev:local', env: { PORT: String(hexlabPort) } },
   ];
-  if (new Set(apps.map(({ port }) => port)).size !== apps.length) throw new Error('API_PORT conflicts with frontend ports 5173–5175.');
+  const ports = apps.flatMap(({ port, extraPorts = [] }) => [port, ...extraPorts]);
+  if (new Set(ports).size !== ports.length) throw new Error('Configured application ports conflict.');
 
   for (const app of apps) {
+    const dir = app.dir ?? app.name;
     try {
-      await access(join(root, app.name, 'node_modules', '.bin', app.bin));
+      await access(join(root, dir, 'node_modules', '.bin', app.bin));
     } catch {
-      throw new Error(`Missing ${app.name} dependencies. Run: npm --prefix ${app.name} ci`);
+      throw new Error(`Missing ${app.name} dependencies. Run: npm --prefix ${dir} ci`);
     }
   }
-  for (const { port } of apps) await checkPort(port);
+  for (const port of ports) await checkPort(port);
 
   process.once('SIGINT', () => stop(130));
   process.once('SIGTERM', () => stop(143));
   console.log('Starting apps (service output below; URLs do not imply readiness):');
   console.log('The backend polls hosted sources and may make billable model calls when configured.');
   for (const app of apps) {
-    console.log(`  ${app.name.padEnd(11)} http://127.0.0.1:${app.port}`);
-    const child = spawn('npm', ['run', 'dev', ...app.args], {
-      cwd: join(root, app.name),
+    const dir = app.dir ?? app.name;
+    const appPorts = [app.port, ...(app.extraPorts ?? [])];
+    console.log(`  ${app.name.padEnd(11)} ${appPorts.map(port => `http://127.0.0.1:${port}`).join(' · ')}`);
+    const child = spawn('npm', ['run', app.script ?? 'dev', ...(app.args ?? [])], {
+      cwd: join(root, dir),
       // Each app loads its own env files; never pass parsed backend secrets to Vite.
-      env: { ...process.env, API_HOST: '127.0.0.1', NO_OPEN: '1' },
+      env: { ...process.env, ...(app.env ?? {}), API_HOST: '127.0.0.1', NO_OPEN: '1' },
       stdio: 'inherit',
       detached: true,
     });

@@ -18,7 +18,7 @@ const DATES = {
   year: ['This year', 24 * 365],
 }
 const EMPTY = { issues: 'No new issues', development: 'No issues in development', testing: 'No issues in testing', closed: 'No closed issues' }
-const NO_FILTERS = { platform: 'all', date: 'all', tag: 'all' }
+const NO_FILTERS = { platform: 'all', date: 'all', tag: 'all', outcome: 'all' }
 
 export function PageTitle({ title, children }) {
   return (
@@ -106,6 +106,7 @@ export default function Board() {
     .filter((i) => f.platform === 'all' || i.sources[f.platform] > 0)
     .filter((i) => f.date === 'all' || new Date(i.firstSeen).getTime() >= cutoff)
     .filter((i) => f.tag === 'all' || (i.tags ?? []).some((t) => tagInfo(t)?.target === f.tag))
+    .filter((i) => f.outcome === 'all' || (f.outcome === 'rejected' ? i.status === 'rejected' : i.status === 'done'))
 
   // Tags filter = the color categories shown as dots on cards (Unit, Trait, Item, Augment, System, Bug fix).
   const tagOptions = [['all', 'All'], ...Object.entries(TARGETS).map(([k, t]) => [k, t.label])]
@@ -129,6 +130,7 @@ export default function Board() {
           <Select label="Platform" value={f.platform} onChange={set('platform')} options={[['all', 'All'], ...Object.entries(SOURCES).map(([k, v]) => [k, v.label])]} />
           <Select label="Date" value={f.date} onChange={set('date')} options={Object.entries(DATES).map(([k, v]) => [k, v[0]])} />
           <Select label="Tags" value={f.tag} onChange={set('tag')} options={tagOptions} dot={TARGETS[f.tag]?.color} />
+          <Select label="Outcome" value={f.outcome} onChange={set('outcome')} options={[[ 'all', 'All outcomes' ], [ 'accepted', 'Accepted' ], [ 'rejected', 'Rejected' ]]} />
           {active > 0 && <button type="button" onClick={() => setF(NO_FILTERS)} className="text-sm text-muted hover:text-text">Clear</button>}
         </div>
         <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -1,12 +1,13 @@
 import { useContext, useEffect, useState } from 'react'
-import { useMatch } from 'react-router-dom'
-import { watchPipeline } from '../data/live.js'
+import { useLocation, useMatch } from 'react-router-dom'
+import { sendCommand, watchPipeline } from '../data/live.js'
 
 import { PipelineContext as Ctx } from './context.js'
 
 export function PipelineProvider({ children }) {
   const issueId = useMatch('/issues/:id/*')?.params.id
-  const [state, setState] = useState({ issues: [], sourceStatus: {} })
+  const runId = new URLSearchParams(useLocation().search).get('run')
+  const [state, setState] = useState({ issues: [], sourceStatus: {}, capabilities: {}, workflow: null })
   const [loadState, setLoadState] = useState('loading')
   const [lastUpdated, setLastUpdated] = useState(null)
   const [error, setError] = useState(null)
@@ -21,9 +22,15 @@ export function PipelineProvider({ children }) {
   }, failure => {
     setLoadState('error')
     setError(failure.message)
-  }), [issueId, revision])
+  }, runId), [issueId, runId, revision])
 
-  return <Ctx.Provider value={{ state, loadState, lastUpdated, error, refresh }}>{children}</Ctx.Provider>
+  const command = async (path, method, body) => {
+    const result = await sendCommand(path, method, body)
+    refresh()
+    return result
+  }
+
+  return <Ctx.Provider value={{ state, loadState, lastUpdated, error, refresh, command }}>{children}</Ctx.Provider>
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

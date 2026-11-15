@@ -10,7 +10,7 @@ import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { Portrait } from './components/Portrait';
 import { ReplayViewer } from './components/ReplayViewer';
 import { parseReplayLink, type ReplayLink } from './replay/experiment';
-function readReplayLink():{link:ReplayLink|null;error:string}{try{return {link:parseReplayLink(window.location.search,baseConfig),error:''}}catch(e){return {link:null,error:e instanceof Error?e.message:'Invalid replay link.'}}}
+function readReplayLink():{link:ReplayLink|null;error:string}{try{return {link:parseReplayLink(window.location.search,baseConfig,__HEXLAB_ENGINE_ID__),error:''}}catch(e){return {link:null,error:e instanceof Error?e.message:'Invalid replay link.'}}}
 const initialA:UnitSetup[]=[{id:'a1',championId:'garen',position:{x:1,y:3},itemId:'chain_vest'},{id:'a2',championId:'yasuo',position:{x:3,y:3},itemId:'bf_sword'},{id:'a3',championId:'jinx',position:{x:2,y:4},itemId:'recurve_bow'}];
 const initialB:UnitSetup[]=[{id:'b1',championId:'leona',position:{x:1,y:1},itemId:'chain_vest'},{id:'b2',championId:'darius',position:{x:3,y:1},itemId:'bf_sword'},{id:'b3',championId:'ahri',position:{x:2,y:0},itemId:'recurve_bow'}];
 const krug:UnitSetup[]=[{id:'krug1',championId:'krug',position:{x:2,y:0}}];

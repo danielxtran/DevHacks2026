@@ -24,7 +24,7 @@ const finite = (value) => typeof value === 'number' && Number.isFinite(value)
 const validId = (id) => typeof id === 'string' && /^[a-z][a-z0-9_]{0,49}$/.test(id) && !['constructor', 'prototype', '__proto__'].includes(id)
 
 function validConfig(config) {
-  if (!isRecord(config) || typeof config.id !== 'string' || !config.id || typeof config.baselineConfigId !== 'string' || !config.baselineConfigId) return false
+  if (!isRecord(config) || typeof config.id !== 'string' || !config.id || typeof config.baselineConfigId !== 'string' || !config.baselineConfigId || typeof config.engineId !== 'string' || !/^[a-f0-9]{64}$/.test(config.engineId)) return false
   if (!isRecord(config.champions) || Object.keys(config.champions).length < 3 || !isRecord(config.items) || !own(config.monsters, 'krug')) return false
   return Object.entries(COLLECTIONS).every(([type, group]) => Object.entries(config[group]).every(([id, entry]) => {
     if (!validId(id) || !isRecord(entry) || typeof entry.name !== 'string' || !entry.name) return false
@@ -41,6 +41,7 @@ export function validateSimulationPlan(plan, config) {
   if (!isRecord(plan)) return { valid: false, errors: ['Add a simulation patch before sending this issue to Testing.'] }
   if (!validConfig(config)) return { valid: false, errors: ['Load the Hexlab baseline before configuring a simulation.'] }
   if (!plan.baselineConfigId || plan.baselineConfigId !== config.baselineConfigId) errors.push('The simulation baseline changed. Reload it and review the patch before testing.')
+  if (!plan.engineId || plan.engineId !== config.engineId) errors.push('The Hexlab engine changed. Reload it and review the patch before testing.')
   if (!SIMULATION_COUNTS.includes(plan.simulations)) errors.push('Choose 100, 1,000, 5,000, or 10,000 battles per configuration.')
   if (!Number.isInteger(plan.seed) || plan.seed < 0 || plan.seed > 4294967295) errors.push('The seed must be an integer from 0 to 4,294,967,295.')
   if (!['pvp', 'pve'].includes(plan.mode)) errors.push('Choose PvP or PvE for the simulation.')
@@ -161,10 +162,11 @@ function comparisonMetricsValid(result, request) {
 /** Validate both network responses and saved evidence before accepting a human review. */
 export function validateSimulationResult(result, request) {
   if (!isRecord(request) || typeof request.baselineConfigId !== 'string' || !request.baselineConfigId
+    || typeof request.engineId !== 'string' || !request.engineId
     || !Array.isArray(request.changes) || !request.changes.length) {
     return { valid: false, errors: ['The simulation request is incomplete. Return to Development and prepare a numeric patch.'] }
   }
-  if (result?.baselineConfigId !== request.baselineConfigId) {
+  if (result?.baselineConfigId !== request.baselineConfigId || result?.engineId !== request.engineId) {
     return { valid: false, errors: ['Hexlab evaluated a different baseline. Reload the baseline, review the patch, and test again.'] }
   }
   if (result.simulations !== request.simulations || result.seed !== request.seed || result.mode !== request.mode
@@ -180,10 +182,11 @@ export function validateSimulationResult(result, request) {
   return { valid: true, errors: [] }
 }
 
-/** baselineConfigId binds evidence to the reviewed config; the server body remains its strict API contract. */
+/** Baseline and engine identities bind a browser request to the reviewed Hexlab implementation. */
 export async function evaluatePatch(request, { signal } = {}) {
-  if (!isRecord(request) || typeof request.baselineConfigId !== 'string' || !request.baselineConfigId) throw new Error('Reload the Hexlab baseline before testing this patch.')
-  const body = { changes: request.changes, simulations: request.simulations, seed: request.seed, mode: request.mode }
+  if (!isRecord(request) || typeof request.baselineConfigId !== 'string' || !request.baselineConfigId || typeof request.engineId !== 'string' || !request.engineId) throw new Error('Reload the Hexlab baseline before testing this patch.')
+  const body = { changes: request.changes, simulations: request.simulations, seed: request.seed, mode: request.mode,
+    expectedBaselineConfigId: request.baselineConfigId, expectedEngineId: request.engineId }
   const result = await requestJson('/simulate', {
     method: 'POST', signal, timeoutMs: 135000,
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

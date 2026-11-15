@@ -7,19 +7,19 @@ afterEach(() => { globalThis.fetch = originalFetch })
 
 const champion = { name: 'Yasuo', role: 'Duelist', hp: 115, attackDamage: 25, attackSpeed: 1.5, armor: 10, range: 1 }
 const config = {
-  id: 'mini-tft-v1', baselineConfigId: 'mini-tft-v1-example',
+  id: 'mini-tft-v1', baselineConfigId: 'mini-tft-v1-example', engineId: 'a'.repeat(64),
   champions: { yasuo: champion, garen: { ...champion, name: 'Garen' }, ahri: { ...champion, name: 'Ahri' } },
   items: { bf_sword: { name: 'B. F. Sword', attackDamage: 15, attackSpeed: 0, armor: 0 } },
   monsters: { krug: { ...champion, name: 'Krug' } },
 }
 const plan = {
-  baselineConfigId: config.baselineConfigId, simulations: 1000, seed: 42, mode: 'pvp',
+  baselineConfigId: config.baselineConfigId, engineId: config.engineId, simulations: 1000, seed: 42, mode: 'pvp',
   changes: [{ type: 'unit', id: 'yasuo', stat: 'attackDamage', value: 20 }],
 }
 const metric = { samples: 100, wins: 50, draws: 0, winRate: 50, confidenceInterval: [40, 60], averageDamageDealt: 100, averageDamageTaken: 80, averageSurvivalDuration: 8 }
 const batch = { games: 1000, draws: 0, champions: { yasuo: metric }, items: {}, compositions: {} }
 const result = {
-  baselineConfigId: config.baselineConfigId, simulations: 1000, seed: 42, mode: 'pvp', appliedChanges: plan.changes,
+  baselineConfigId: config.baselineConfigId, engineId: config.engineId, simulations: 1000, seed: 42, mode: 'pvp', appliedChanges: plan.changes,
   before: batch, after: batch,
   differences: { champions: { yasuo: { winRate: 0, averageDamageDealt: 0, averageDamageTaken: 0, averageSurvivalDuration: 0 } }, items: {} },
   evaluationDurationMs: 25, methodology: 'Paired seeded battles.',
@@ -47,9 +47,9 @@ test('old or unsupported specs cannot silently become simulation patches', () =>
   ]) assert.equal(validateSimulationPlan({ ...plan, changes }, config).valid, false, JSON.stringify(changes))
 })
 
-test('experiment validation rejects a stale baseline, unsupported count, invalid seed or missing mode', () => {
+test('experiment validation rejects a stale baseline or engine, unsupported count, invalid seed or missing mode', () => {
   for (const overrides of [
-    { baselineConfigId: 'old-baseline' }, { simulations: 2000 }, { seed: -1 }, { seed: 4294967296 }, { seed: 1.5 }, { mode: undefined },
+    { baselineConfigId: 'old-baseline' }, { engineId: 'b'.repeat(64) }, { simulations: 2000 }, { seed: -1 }, { seed: 4294967296 }, { seed: 1.5 }, { mode: undefined },
   ]) assert.equal(validateSimulationPlan({ ...plan, ...overrides }, config).valid, false)
   assert.equal(validateSimulationPlan(plan, null).valid, false)
 })
@@ -74,11 +74,11 @@ test('rejects an invalid baseline response', async () => {
   await assert.rejects(fetchSimulationConfig(), /invalid baseline/)
 })
 
-test('submits the exact numeric patch and keeps baseline metadata out of the strict API body', async () => {
+test('submits the exact numeric patch with frozen baseline and engine identities', async () => {
   globalThis.fetch = async (url, options) => {
     assert.equal(url, '/hexlab-api/simulate')
     assert.equal(options.method, 'POST')
-    assert.deepEqual(JSON.parse(options.body), { changes: plan.changes, simulations: 1000, seed: 42, mode: 'pvp' })
+    assert.deepEqual(JSON.parse(options.body), { changes: plan.changes, simulations: 1000, seed: 42, mode: 'pvp', expectedBaselineConfigId: plan.baselineConfigId, expectedEngineId: plan.engineId })
     return response(result)
   }
   assert.deepEqual(await evaluatePatch(plan), result)
@@ -116,6 +116,7 @@ test('saved results must contain measured batches and match the frozen experimen
     { ...result, after: { ...batch, games: 100 } },
     { ...result, after: { ...batch, champions: { yasuo: { ...metric, confidenceInterval: [70, 40] } } } },
     { ...result, seed: 999 },
+    { ...result, engineId: 'b'.repeat(64) },
   ]) assert.equal(validateSimulationResult(cached, plan).valid, false)
   assert.equal(validateSimulationResult(result, null).valid, false)
   assert.equal(validateSimulationResult(result, { ...plan, changes: null }).valid, false)

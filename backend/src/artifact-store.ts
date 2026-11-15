@@ -24,7 +24,7 @@ export class ArtifactStore {
     try {
       const result = await this.pool.query(
         `insert into public.artifacts (id,run_id,kind,relative_path,media_type,sha256,size_bytes,logical_path)
-         values ($1,$2,$3,$4,$5,$6,$7,$8) returning id,run_id,kind,logical_path,media_type,sha256,size_bytes,created_at::text as created_at`,
+         values ($1,$2,$3,$4,$5,$6,$7,$8) returning id,run_id,kind,logical_path,media_type,sha256,size_bytes,to_json(created_at) as created_at`,
         [id, runId, kind, relativePath, mediaType, createHash('sha256').update(bytes).digest('hex'), bytes.length, logicalPath],
       );
       return ArtifactSchema.parse(result.rows[0]);
@@ -36,7 +36,7 @@ export class ArtifactStore {
 
   async list(runId: string): Promise<unknown[]> {
     const result = await this.pool.query(
-      `select id,run_id,kind,logical_path,media_type,sha256,size_bytes,created_at::text as created_at
+      `select id,run_id,kind,logical_path,media_type,sha256,size_bytes,to_json(created_at) as created_at
        from public.artifacts where run_id=$1 order by created_at,id`, [runId],
     );
     return result.rows.map((row) => ArtifactSchema.parse(row));
@@ -44,7 +44,7 @@ export class ArtifactStore {
 
   async read(id: string): Promise<{ meta: unknown; contents: Buffer }> {
     const result = await this.pool.query(
-      `select id,run_id,kind,relative_path,logical_path,media_type,sha256,size_bytes,created_at::text as created_at
+      `select id,run_id,kind,relative_path,logical_path,media_type,sha256,size_bytes,to_json(created_at) as created_at
        from public.artifacts where id=$1`, [id],
     );
     const row = result.rows[0];

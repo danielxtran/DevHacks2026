@@ -27,7 +27,7 @@ npm run dev:api    # → http://127.0.0.1:3002
 - Vite proxies `/hexlab-api/*` to `http://127.0.0.1:3002/api/*` in dev and preview. For a separately hosted frontend, set `VITE_HEXLAB_API_URL` in `ui/.env.local` to the simulator's API base URL (ending in `/api`) before building, and configure the simulator's `CORS_ORIGINS` for that frontend.
 - `npm run build && npm run preview` serves the production build on 5173 too.
 - `npm run lint` runs oxlint (currently clean).
-- `npm test` checks API contracts, version binding, retries, result handling, and persistence recovery. With both services running, `HEXLAB_TEST_URL=http://127.0.0.1:5173 npm test` also runs a real API-to-review integration test.
+- `npm test` checks API contracts, version binding, retries, result handling, and persistence recovery without requiring a running Hexlab service.
 
 ## Supabase
 

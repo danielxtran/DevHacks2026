@@ -90,7 +90,9 @@ export function reviewBlockReason(issue, playtest, config) {
     return 'These results belong to an earlier spec. Test the latest approved version.'
   }
   if (!playtest.request?.baselineConfigId || playtest.request.baselineConfigId !== playtest.result.baselineConfigId
-    || playtest.configSnapshot?.baselineConfigId !== playtest.result.baselineConfigId) {
+    || playtest.configSnapshot?.baselineConfigId !== playtest.result.baselineConfigId
+    || !playtest.request.engineId || playtest.request.engineId !== playtest.result.engineId
+    || playtest.configSnapshot?.engineId !== playtest.result.engineId) {
     return 'The result does not match its saved baseline. Return to Development and run a new comparison.'
   }
   const request = playtest.request
@@ -117,9 +119,9 @@ const HEXLAB_APP_URL = (import.meta.env?.VITE_HEXLAB_APP_URL || 'http://127.0.0.
 /** Deep link into Hexlab's replay view for the exact experiment behind this result. */
 export function replayUrl(playtest, baseUrl = HEXLAB_APP_URL) {
   const result = playtest?.result
-  if (!result?.baselineConfigId || !Array.isArray(result.appliedChanges)) return null
+  if (!result?.baselineConfigId || !result.engineId || !Array.isArray(result.appliedChanges)) return null
   const experiment = {
-    baselineConfigId: result.baselineConfigId,
+    baselineConfigId: result.baselineConfigId, engineId: result.engineId,
     changes: result.appliedChanges.map(({ type, id, stat, value }) => ({ type, id, stat, value })),
     simulations: result.simulations, seed: result.seed, mode: result.mode,
   }

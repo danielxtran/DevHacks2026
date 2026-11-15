@@ -1,6 +1,6 @@
 # Pipeline UI
 
-Read-only issue tracker for the backend's current Discovery results. Board, List, and issue details use the backend HTTP API—not the old Supabase `issues`/`ui_issue_meta` prototype tables.
+The live tracker uses backend-owned Discovery and workflow state, not the old Supabase `issues`/`ui_issue_meta` prototype tables. Issue metadata/assignment, discussion, triage, merge, and experiment-start controls are being connected to the backend. Initial Development, Testing, and review pages are now in the working tree but remain incomplete and unverified; see the [workflow restoration status](../.scratch/restore-workflow-ui/spec.md).
 
 ## Run
 
@@ -31,11 +31,11 @@ A separately hosted production bundle needs an equivalent reverse proxy for `/ap
 - Source status shows the latest actual collection sweep, including incomplete/failed results and timestamps. This is not a claim that the remote platform is currently healthy.
 - Original feedback links open the mock source apps. Source text is rendered as text, never HTML.
 - A failed refresh retains the last successful response with a stale-data warning. Initial failure and genuinely empty Discovery results have distinct states. There is no seed/localStorage fallback or generated agent progress.
-- Only a recorded human decision closes an issue as Accepted/Rejected. A completed run alone remains awaiting a human decision; failed/interrupted runs remain visible.
+- A recorded human decision closes an experiment as Accepted/Rejected; issue triage dismissal is separate. A completed run alone remains awaiting a human decision; failed/interrupted runs remain visible.
 
-Workflow commands, assignments, edits, discussion, artifacts, and playtest pages are not connected in this read-only milestone. Old spec/results URLs show an unavailable state rather than simulated outcomes. Trends and gameplay statistics are not invented from source counts.
+The current working tree adds backend command mapping and issue-detail controls for assignment/metadata, discussion, dismiss/restore, merge, and starting an experiment, plus initial Development/Testing/review pages. These changes are uncommitted and unverified. Board/List filtering, command recovery edge cases, and complete history/replay behavior remain; do not infer completion or persistence until migrations, tests, and the live walkthrough pass. Trends and gameplay statistics are not invented from source counts.
 
-The incoming simulator implementation is preserved: `src/simulation/`, simulation components/pages, `src/store/simulation-provider.jsx`, and Hexlab replay code in `tft-clone/`. Both `/api` and `/hexlab-api` proxies are configured. The simulator workflow is not mounted by the live tracker; see [the preserved upstream simulator reference](SIMULATOR.md) for its contracts and walkthrough. The test command runs both live-tracker and simulator tests; its optional live Hexlab check skips unless explicitly configured.
+The previous simulator implementation is preserved in `src/simulation/`, simulation components/pages, `src/store/simulation-provider.jsx`, and Hexlab replay code in `tft-clone/`. Both `/api` and `/hexlab-api` proxies are configured. The old simulator provider is not the authority for the restored backend workflow; see [the preserved upstream simulator reference](SIMULATOR.md) for component/contract references. The test command runs live-tracker and simulator tests without requiring a running Hexlab service.
 
 The legacy prototype source/data and Supabase seed tools remain in the repository but are not used by the live tracker. Do not seed the old UI tables to populate this view; populate backend Discovery instead.
 

@@ -78,7 +78,92 @@ export const RSearchSchema = z.union([RSearchPageSchema, RSearchEmptySchema]);
 export type RTweet = z.infer<typeof TweetSchema>;
 export type RSearchPage = z.infer<typeof RSearchSchema>;
 
-export const StartRunRequestSchema = z.object({ idempotencyKey: z.string().trim().min(1).max(200) }).strict();
+const ActorSchema = z.string().trim().min(1).max(100);
+export const DeveloperIdSchema = z.enum(['dev', 'jun', 'marco', 'ana', 'priya']);
+export const IssueMetadataRequestSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  actor: ActorSchema,
+  developer: DeveloperIdSchema.nullable().optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  tags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
+}).strict().refine(({ developer, title, tags }) => developer !== undefined || title !== undefined || tags !== undefined, {
+  message: 'At least one issue field must be provided.',
+});
+export const IssueCommentRequestSchema = z.object({ expectedRevision: z.number().int().positive(), actor: ActorSchema, text: z.string().trim().min(1).max(5000) }).strict();
+export const IssueDismissRequestSchema = z.object({ expectedRevision: z.number().int().positive(), actor: ActorSchema, reason: z.string().trim().min(1).max(2000) }).strict();
+export const IssueRestoreRequestSchema = z.object({ expectedRevision: z.number().int().positive(), actor: ActorSchema }).strict();
+export const IssueMergeRequestSchema = z.object({
+  expectedRevision: z.number().int().positive(), expectedCanonicalRevision: z.number().int().positive(),
+  actor: ActorSchema, canonicalIssueId: z.string().uuid(),
+}).strict();
+export const StartRunRequestSchema = z.object({
+  idempotencyKey: z.string().trim().min(1).max(200), actor: ActorSchema,
+}).strict();
+
+const HexlabKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,49}$/).refine(id => !['constructor', 'prototype', '__proto__'].includes(id));
+const HexlabStatsSchema = z.object({
+  hp: z.number().finite().min(1).max(10000), attackDamage: z.number().finite().min(0).max(1000),
+  attackSpeed: z.number().finite().min(0.1).max(5), armor: z.number().finite().min(0).max(500),
+  range: z.number().int().min(1).max(4),
+});
+export const HexlabConfigSchema = z.object({
+  id: z.string().min(1).max(100), baselineConfigId: z.string().min(1).max(120),
+  engineId: z.string().regex(/^[a-f0-9]{64}$/),
+  champions: z.record(HexlabKeySchema, z.object({ name: z.string().min(1).max(80), role: z.string().min(1).max(40), portrait: z.string().regex(/^[A-Za-z0-9]+$/).optional(), ...HexlabStatsSchema.shape }).strict()).refine(value => Object.keys(value).length >= 3),
+  items: z.record(HexlabKeySchema, z.object({ name: z.string().min(1).max(80), attackDamage: z.number().finite().min(0).max(1000), attackSpeed: z.number().finite().min(0).max(5), armor: z.number().finite().min(0).max(500) }).strict()),
+  monsters: z.record(HexlabKeySchema, z.object({ name: z.string().min(1).max(80), role: z.string().min(1).max(40), portrait: z.string().regex(/^[A-Za-z0-9]+$/).optional(), ...HexlabStatsSchema.shape }).strict()).refine(value => Object.hasOwn(value, 'krug')),
+}).strict();
+export const NumericChangeSchema = z.object({
+  type: z.enum(['unit', 'item', 'monster']), id: HexlabKeySchema,
+  stat: z.enum(['hp', 'attackDamage', 'attackSpeed', 'armor', 'range']), value: z.number().finite(),
+}).strict();
+export const NumericPatchSchema = z.array(NumericChangeSchema).max(100);
+export const NumericDesignOutputSchema = z.object({
+  markdown: z.string().trim().min(1).max(50000),
+  hypothesis: z.string().trim().min(1).max(5000),
+  evidenceAssessment: z.enum(['supported', 'insufficient_evidence']),
+  evidenceRationale: z.string().trim().min(1).max(5000),
+  evidenceIds: z.array(z.string().min(1)).max(100),
+  intendedChanges: z.array(z.string().trim().min(1).max(1000)).max(20),
+  preservedBehavior: z.array(z.string().trim().min(1).max(1000)).max(20),
+  successCriteria: z.array(z.string().trim().min(1).max(1000)).max(20),
+  numericPatch: NumericPatchSchema.nullable(),
+  unsupportedReason: z.string().max(2000).nullable(),
+}).strict().superRefine((output, ctx) => {
+  if ((!output.numericPatch || output.numericPatch.length === 0) && !output.unsupportedReason?.trim()) {
+    ctx.addIssue({ code: 'custom', message: 'A missing numeric patch must explain why the proposal is unsupported.' });
+  }
+});
+const RunRevisionSchema = z.object({ expectedRevision: z.number().int().positive(), actor: ActorSchema });
+export const SpecRevisionRequestSchema = RunRevisionSchema.extend({
+  idempotencyKey: z.string().trim().min(1).max(200), expectedVersion: z.number().int().positive(),
+  prompt: z.string().trim().min(1).max(5000),
+}).strict();
+export const SpecEditRequestSchema = RunRevisionSchema.extend({
+  expectedVersion: z.number().int().positive(), baseSpecVersionId: z.string().uuid().optional(),
+  markdown: z.string().max(50000).optional(), numericPatch: NumericPatchSchema.optional(),
+  note: z.string().max(2000).default(''),
+}).strict().refine(({ markdown, numericPatch, baseSpecVersionId }) => markdown !== undefined || numericPatch !== undefined || baseSpecVersionId !== undefined, {
+  message: 'Provide markdown or a numeric patch to save a version.',
+});
+export const SpecApprovalRequestSchema = RunRevisionSchema.extend({
+  idempotencyKey: z.string().trim().min(1).max(200), specVersionId: z.string().uuid(), baselineConfigId: z.string().min(1).max(120),
+  engineId: z.string().regex(/^[a-f0-9]{64}$/), numericPatch: NumericPatchSchema,
+  seed: z.number().int().min(0).max(4294967295), mode: z.enum(['pvp', 'pve']),
+  battles: z.union([z.literal(100), z.literal(1000), z.literal(5000), z.literal(10000)]),
+}).strict();
+export const SpecRejectionRequestSchema = RunRevisionSchema.extend({
+  specVersionId: z.string().uuid(), reason: z.string().trim().min(1).max(2000),
+}).strict();
+export const SimulationQueueRequestSchema = RunRevisionSchema.extend({
+  idempotencyKey: z.string().trim().min(1).max(200), battles: z.union([z.literal(100), z.literal(1000), z.literal(5000), z.literal(10000)]),
+}).strict();
+export const SimulationRetryRequestSchema = RunRevisionSchema.extend({ idempotencyKey: z.string().trim().min(1).max(200) }).strict();
+export const ReturnToDevelopmentRequestSchema = RunRevisionSchema.extend({ reason: z.string().trim().min(1).max(2000) }).strict();
+export const NumericDecisionRequestSchema = RunRevisionSchema.extend({
+  decision: z.enum(['accept', 'reject']), comment: z.string().max(5000).default(''),
+  specVersionId: z.string().uuid(), simulationId: z.string().uuid(),
+}).strict();
 export const HumanDecisionSchema = z.object({
   decision: z.enum(['accept', 'reject']),
   reviewer: z.string().trim().min(1).max(200),

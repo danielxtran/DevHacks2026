@@ -13,6 +13,14 @@ function loopbackHost(value: string | undefined): string {
   return host;
 }
 
+function loopbackHexlabUrl(value: string | undefined): string {
+  const url = new URL(value ?? 'http://127.0.0.1:3002/api');
+  if (url.protocol !== 'http:' || !['127.0.0.1', '::1', 'localhost'].includes(url.hostname) || url.username || url.password) {
+    throw new Error('HEXLAB_API_URL must be an unauthenticated HTTP URL on loopback.');
+  }
+  return url.href.replace(/\/+$/, '');
+}
+
 function sourceBaseUrl(value: string | undefined, fallback: string, name: string): string {
   const configured = value ?? fallback;
   let url: URL;
@@ -40,6 +48,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     databaseUrl,
     riotditBaseUrl: sourceBaseUrl(env.RIOTDIT_BASE_URL, 'http://127.0.0.1:5174', 'RIOTDIT_BASE_URL'),
     rBaseUrl: sourceBaseUrl(env.R_BASE_URL, 'http://127.0.0.1:5175', 'R_BASE_URL'),
+    hexlabBaseUrl: loopbackHexlabUrl(env.HEXLAB_API_URL),
     openaiApiKey: env.OPENAI_API_KEY,
     openaiModel: env.OPENAI_MODEL,
     baselineRevision: env.BASELINE_REVISION,

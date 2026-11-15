@@ -8,6 +8,7 @@ import Board from './pages/Board'
 import List from './pages/List'
 import IssueLayout from './pages/IssueLayout'
 import IssueDetail from './pages/IssueDetail'
+import WorkflowPage from './pages/WorkflowPage'
 
 // Riot nav: small uppercase links. Hover and selection show a translucent rounded box (as on riotgames.com);
 // the selected one also gets a red bar on the header's bottom edge.
@@ -67,10 +68,6 @@ function SourceHealth() {
   )
 }
 
-function UnavailableWorkflow() {
-  return <StateView kind="empty" title="Workflow artifacts are not connected yet" action={<Button to="..">Back to issue</Button>}>The live tracker does not simulate specifications, checks, or playtest results.</StateView>
-}
-
 function TopBar() {
   const { lastUpdated, refresh } = usePipeline()
   return (
@@ -113,7 +110,7 @@ export default function App() {
             {loadState === 'error' && (
               <div className="mb-6">
                 <StateView kind="error" title={lastUpdated ? 'Tracker data may be stale' : 'Couldn’t load tracker data'} action={<Button onClick={refresh}>Retry</Button>}>
-                  {error} {lastUpdated ? 'Keeping the last successful response while reconnecting.' : 'Start the backend on port 3001; no demo data is substituted.'}
+                  {error} {lastUpdated ? 'Keeping the last successful response while reconnecting.' : 'No demo data is substituted.'}
                 </StateView>
               </div>
             )}
@@ -124,9 +121,9 @@ export default function App() {
             <Route path="/feedback" element={<Navigate to="/list" replace />} />
             <Route path="/issues/:id" element={<IssueLayout />}>
               <Route index element={<IssueDetail />} />
-              <Route path="spec" element={<UnavailableWorkflow />} />
-              <Route path="playtest" element={<UnavailableWorkflow />} />
-              <Route path="verified" element={<UnavailableWorkflow />} />
+              <Route path="spec" element={<WorkflowPage mode="spec" />} />
+              <Route path="playtest" element={<WorkflowPage mode="playtest" />} />
+              <Route path="verified" element={<WorkflowPage mode="verified" />} />
             </Route>
             <Route path="*" element={<StateView kind="empty" title="Page not found" action={<Button to="/">Back to board</Button>} />} />
             </Routes>}

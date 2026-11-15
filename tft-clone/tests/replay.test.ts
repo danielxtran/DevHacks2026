@@ -4,39 +4,44 @@ import { configIdentifier } from '../src/config/validation';
 import { simulateBattle } from '../src/engine/combat';
 import { compareBalance } from '../src/simulation/balanceComparison';
 import { parseReplayLink, replaySetup, scanOutcomes } from '../src/replay/experiment';
+import { engineIdentifier } from '../server/app';
 import { frameAt, startingUnits } from '../src/replay/frame';
 
 const baselineConfigId = configIdentifier(baseConfig);
+const engineId = engineIdentifier();
 const link = (body: object, extra = '') => `?replay=${encodeURIComponent(JSON.stringify(body))}${extra}`;
-const yasuo = { baselineConfigId, changes: [{ type: 'unit', id: 'yasuo', stat: 'attackDamage', value: 20 }], simulations: 100, seed: 42, mode: 'pvp' };
+const yasuo = { baselineConfigId, engineId, changes: [{ type: 'unit', id: 'yasuo', stat: 'attackDamage', value: 20 }], simulations: 100, seed: 42, mode: 'pvp' };
 
 describe('replay links', () => {
   it('ignores pages without a replay parameter', () => {
-    expect(parseReplayLink('', baseConfig)).toBeNull();
+    expect(parseReplayLink('', baseConfig, engineId)).toBeNull();
   });
   it('parses the experiment, game, and focus', () => {
-    const parsed = parseReplayLink(link(yasuo, '&game=7&focus=yasuo'), baseConfig)!;
+    const parsed = parseReplayLink(link(yasuo, '&game=7&focus=yasuo'), baseConfig, engineId)!;
     expect(parsed.experiment.request).toEqual({ changes: yasuo.changes, simulations: 100, seed: 42, mode: 'pvp' });
     expect(parsed.game).toBe(7);
     expect(parsed.focus).toBe('yasuo');
   });
+  it('rejects a replay when its engine identity differs', () => {
+    expect(() => parseReplayLink(link({ ...yasuo, engineId: 'a'.repeat(64) }), baseConfig, engineId)).toThrow(/renderer uses/);
+  });
   it('drops out-of-range games and unknown champions', () => {
-    const parsed = parseReplayLink(link(yasuo, '&game=101&focus=nobody'), baseConfig)!;
+    const parsed = parseReplayLink(link(yasuo, '&game=101&focus=nobody'), baseConfig, engineId)!;
     expect(parsed.game).toBeUndefined();
     expect(parsed.focus).toBeUndefined();
   });
   it('rejects a different baseline, malformed JSON, and invalid patches', () => {
-    expect(() => parseReplayLink(link({ ...yasuo, baselineConfigId: 'mini-tft-v1-00000000' }), baseConfig)).toThrow(/would not match/);
-    expect(() => parseReplayLink('?replay=%7Bnope', baseConfig)).toThrow(/not valid JSON/);
-    expect(() => parseReplayLink(link({ ...yasuo, simulations: 7 }), baseConfig)).toThrow(/valid Hexlab experiment/);
-    expect(() => parseReplayLink(link({ ...yasuo, changes: [{ type: 'unit', id: 'nobody', stat: 'hp', value: 1 }] }), baseConfig)).toThrow();
+    expect(() => parseReplayLink(link({ ...yasuo, baselineConfigId: 'mini-tft-v1-00000000' }), baseConfig, engineId)).toThrow(/would not match/);
+    expect(() => parseReplayLink('?replay=%7Bnope', baseConfig, engineId)).toThrow(/not valid JSON/);
+    expect(() => parseReplayLink(link({ ...yasuo, simulations: 7 }), baseConfig, engineId)).toThrow(/valid Hexlab experiment/);
+    expect(() => parseReplayLink(link({ ...yasuo, changes: [{ type: 'unit', id: 'nobody', stat: 'hp', value: 1 }] }), baseConfig, engineId)).toThrow();
   });
 });
 
 describe('replays reproduce the measured batch', () => {
   for (const mode of ['pvp', 'pve'] as const) {
     it(`recorded replays match unrecorded batch battles (${mode})`, async () => {
-      const { experiment } = parseReplayLink(link({ ...yasuo, mode }), baseConfig)!;
+      const { experiment } = parseReplayLink(link({ ...yasuo, mode }), baseConfig, engineId)!;
       const setup = replaySetup(experiment, baseConfig);
       const outcomes = await scanOutcomes(setup);
       const measured = await compareBalance(experiment.request, baseConfig);
@@ -59,7 +64,7 @@ describe('replays reproduce the measured batch', () => {
   }
 
   it('the final replay frame matches the battle result', () => {
-    const { experiment } = parseReplayLink(link(yasuo), baseConfig)!;
+    const { experiment } = parseReplayLink(link(yasuo), baseConfig, engineId)!;
     const m = replaySetup(experiment, baseConfig).matchups[3];
     const result = simulateBattle(m.teamA, m.teamB, baseConfig, m.seed);
     const { units } = frameAt(startingUnits(result), result, result.duration);

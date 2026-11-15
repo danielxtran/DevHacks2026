@@ -23,8 +23,11 @@ function mockFetch(t, detail = { issue: { id: issueId, feedback: [feedback] } })
   const calls = []
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     calls.push({ url, init })
-    const data = url === '/api/issues' ? { issues: [row] } : url === '/api/sources' ? { sources: [source] } : detail
-    return new Response(JSON.stringify(data), { status: detail === null && url.includes(issueId) ? 404 : 200 })
+    const data = url === '/api/issues' ? { issues: [row] }
+      : url === '/api/sources' ? { sources: [source] }
+        : url === '/api/capabilities' ? { capabilities: {} }
+          : url === `/api/issues/${issueId}/runs` ? { runs: [] } : detail
+    return new Response(JSON.stringify(data), { status: detail === null && url === `/api/issues/${issueId}` ? 404 : 200 })
   })
   return calls
 }
@@ -63,7 +66,12 @@ test('only persisted human decisions close issues; failures and unknown states s
   assert.equal(accepted.statusLabel, 'Accepted')
   const rejected = mapIssue({ ...row, latest_run: { ...run, decision: 'reject' } })
   assert.equal(rejected.stage, 'verified')
-  assert.equal(rejected.dismissed, true)
+  assert.equal(rejected.dismissed, false)
+  const triageRejected = mapIssue({ ...row, triage_state: 'dismissed' })
+  assert.equal(triageRejected.stage, 'verified')
+  assert.equal(triageRejected.dismissed, true)
+  assert.equal(triageRejected.statusLabel, 'Rejected issue')
+  assert.equal(mapIssue({ ...row, latest_run: { ...run, stage: 'spec_rejected', phase: 'spec_rejected' } }).stage, 'feedback')
 })
 
 test('real reply text, source links, and thread context survive mapping; unsafe links do not', () => {
@@ -82,7 +90,7 @@ test('real reply text, source links, and thread context survive mapping; unsafe 
 test('loads the board, source status and selected evidence without credentials or N+1 detail reads', async t => {
   const calls = mockFetch(t)
   const result = await loadPipeline(issueId, new AbortController().signal)
-  assert.deepEqual(calls.map(call => call.url), ['/api/issues', '/api/sources', `/api/issues/${issueId}`])
+  assert.deepEqual(calls.map(call => call.url), ['/api/issues', '/api/sources', `/api/issues/${issueId}`, '/api/capabilities', `/api/issues/${issueId}/runs`])
   assert.ok(calls.every(call => call.init.cache === 'no-store' && !call.init.headers.Authorization))
   assert.equal(result.issues[0].feedback[0].id, feedback.id)
   assert.equal(result.sourceStatus.x.state, 'incomplete')
@@ -92,7 +100,7 @@ test('loads the board, source status and selected evidence without credentials o
 test('board reads do not fetch every issue detail and 404 detail does not replace the board with seeds', async t => {
   const calls = mockFetch(t, null)
   const board = await loadPipeline(undefined, new AbortController().signal)
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 3)
   assert.equal(board.issues[0].feedback, undefined)
   const result = await loadPipeline(issueId, new AbortController().signal)
   assert.equal(result.issues[0].feedback, null)
@@ -105,6 +113,19 @@ test('network, malformed and unauthorized responses fail visibly rather than ret
   await assert.rejects(loadPipeline(undefined, new AbortController().signal), /invalid tracker response/)
   assert.throws(() => mapIssue({ ...row, source_counts: { r: '2' } }), /invalid tracker response/)
   assert.throws(() => mapFeedback({ ...feedback, source: 'unknown' }), /invalid tracker response/)
+})
+
+test('tracker errors identify the failed endpoint and backend validation details', async t => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
+    error: 'invalid_request', details: [{ path: ['created_at'], message: 'Invalid ISO datetime' }],
+  }), { status: 400 }))
+  await assert.rejects(loadPipeline(undefined, new AbortController().signal), error => {
+    assert.match(error.message, /Tracker API \/issues returned HTTP 400: created_at: Invalid ISO datetime/)
+    assert.doesNotMatch(error.message, /backend is running/)
+    return true
+  })
+  t.mock.method(globalThis, 'fetch', async () => new Response('Bad Gateway', { status: 502 }))
+  await assert.rejects(loadPipeline(undefined, new AbortController().signal), /\/issues returned HTTP 502/)
 })
 
 test('polling serializes requests and cancellation suppresses stale results and future polls', async t => {
@@ -120,14 +141,14 @@ test('polling serializes requests and cancellation suppresses stale results and 
     return new Response(JSON.stringify(url === '/api/issues' ? { issues: [row] } : { sources: [] }))
   })
   const stop = watchPipeline(undefined, () => { updates++ }, () => { errors++ })
-  assert.equal(calls, 2)
+  assert.equal(calls, 3)
   t.mock.timers.tick(15000)
-  assert.equal(calls, 2)
+  assert.equal(calls, 3)
   stop()
   release()
   await nextTurn()
   t.mock.timers.tick(15000)
-  assert.equal(calls, 2)
+  assert.equal(calls, 3)
   assert.equal(updates, 0)
   assert.equal(errors, 0)
 })
