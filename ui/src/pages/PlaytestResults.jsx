@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { usePipeline } from '../store/pipeline'
+import { canVerifySimulation } from '../store/reducer'
 import { AgentActivityPanel, ApprovalGate } from '../components/pipelineParts'
 import { StatCard, VerdictBanner } from '../components/evidence'
 import { CompWinRates, ConvergenceChart } from '../components/charts'
 import BuildSummary from '../components/BuildSummary'
+import SimulationResults from '../components/SimulationResults'
 import { Button, ErrorPanel, Skeleton, StateView, VersionPicker } from '../components/ui'
 import { num } from '../components/format'
+import { reviewBlockReason } from '../simulation/results'
 
-const runLine = (pt) => `${num(pt.matches)} simulated matches · ${pt.botsPerMatch ?? 8} bot players each`
+const runLine = (pt) => pt?.source === 'hexlab'
+  ? `${num(pt.result?.simulations ?? pt.request?.simulations ?? 0)} battles per configuration · seed ${pt.result?.seed ?? pt.request?.seed ?? '—'}`
+  : `${num(pt?.matches ?? 0)} illustrative matches · demo data`
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
 
 /** Matches run · avg damage dealt · avg time alive (spec 6.2.3). */
@@ -31,20 +36,13 @@ function SimStats({ pt }) {
   )
 }
 
-const CAUTION = {
-  not_supported: 'Live stats don’t back the original complaint, so this change may not be needed.',
-  inconclusive: 'The result is within noise. Re-run with more matches before verifying.',
-  partial: 'The metric improved but is still outside the target range.',
-  failed: 'The change didn’t move the metric toward the target.',
-}
-
 function Rerun({ issue, disabled }) {
   const { dispatch } = usePipeline()
   const [n, setN] = useState(5000)
   return (
-    <span className="inline-flex items-center gap-2">
-      <select aria-label="Matches" value={n} onChange={(e) => setN(Number(e.target.value))} className="select-pill">
-        {[200, 1000, 2000, 5000].map((v) => <option key={v} value={v}>{num(v)} matches</option>)}
+    <span className="inline-flex max-w-full flex-wrap items-center gap-2">
+      <select aria-label="Battles per configuration" value={n} disabled={disabled} onChange={(e) => setN(Number(e.target.value))} className="select-pill max-w-full disabled:cursor-not-allowed disabled:opacity-60">
+        {[100, 1000, 5000, 10000].map((v) => <option key={v} value={v}>{num(v)} battles per configuration</option>)}
       </select>
       <Button size="sm" disabled={disabled} onClick={() => dispatch({ type: 'PLAYTEST_RERUN', id: issue.id, matches: n })}>Re-run</Button>
     </span>
@@ -54,7 +52,7 @@ function Rerun({ issue, disabled }) {
 export default function PlaytestResults({ view = 'playtest' }) {
   const { issue } = useOutletContext()
   const navigate = useNavigate()
-  const { dispatch } = usePipeline()
+  const { dispatch, simulation } = usePipeline()
   const pt = issue.playtest
   const building = issue.run?.agent === 'build'
   const running = issue.run?.agent === 'playtest'
@@ -66,30 +64,39 @@ export default function PlaytestResults({ view = 'playtest' }) {
   // Every playtest run is kept. The newest one is "current" while the issue is still in this cycle.
   const history = issue.playtests ?? []
   const newest = history.length - 1
-  const idx = picked ?? newest
+  const idx = picked != null && picked >= 0 && picked <= newest ? picked : newest
   const entry = history[idx]
   const isCurrent = !!pt && idx === newest
   const shownPt = isCurrent ? pt : entry
+  const realResult = shownPt?.source === 'hexlab'
+  const blockReason = shownPt ? reviewBlockReason(issue, shownPt, simulation?.config)
+    || (inPlaytest && !canVerifySimulation(issue) ? 'Only the latest completed simulation for the approved patch can be verified.' : null) : null
+  const rerunBlockReason = shownPt ? reviewBlockReason({ ...issue, error: null }, shownPt, simulation?.config) : null
   const backToSpec = () => navigate(`/issues/${issue.id}/spec`)
+  const returnToDevelopment = (comment) => {
+    dispatch({ type: 'PLAYTEST_REJECT', id: issue.id, comment })
+    backToSpec()
+  }
 
   if (view === 'verified' && !verified) {
-    return <StateView kind="empty" title="Not verified yet">A person marks the change verified on the Playtest page once the bots finish.</StateView>
+    return <StateView kind="empty" title="Not verified yet">Review the measured simulation results on the Playtest page, then mark the change verified.</StateView>
   }
 
   if (!pt && !busy && !(issue.error && inPlaytest) && !history.length) {
-    return <StateView kind="empty" title="No playtest yet">Approve the spec. The Builder makes the change in the background, and bots start playing once every check passes.</StateView>
+    return <StateView kind="empty" title="No simulation yet" action={<Button to={`/issues/${issue.id}/spec`}>Open Development</Button>}>Prepare the stat patch in Development, then approve the spec to compare the baseline and patched configurations.</StateView>
   }
 
   return (
     <div className="space-y-10">
+      {simulation?.error && inPlaytest && (
+        <ErrorPanel error={{ title: 'Simulator connection unavailable', message: simulation.error }} onRetry={simulation.reload} />
+      )}
       {issue.error && inPlaytest && (
         <div className="space-y-3">
-          <ErrorPanel error={issue.error} onRetry={() => dispatch({ type: 'RETRY_RUN', id: issue.id })} />
-          {!pt && issue.error.run?.agent === 'build' && (
-            <Button variant="danger" onClick={() => { dispatch({ type: 'PLAYTEST_REJECT', id: issue.id, comment: 'Build checks kept failing' }); backToSpec() }}>
-              Back to spec
-            </Button>
-          )}
+          <ErrorPanel error={issue.error} onRetry={issue.error.run ? () => dispatch({ type: 'RETRY_RUN', id: issue.id }) : undefined} />
+          <Button variant="danger" onClick={() => returnToDevelopment('Returned to Development after the test could not complete')}>
+            Back to development
+          </Button>
         </div>
       )}
       {history.length > 0 && (
@@ -104,15 +111,15 @@ export default function PlaytestResults({ view = 'playtest' }) {
           })}
           note={
             !isCurrent && entry
-              ? <>Earlier result{entry.outcome ? ` (${entry.outcome})` : ''} from {num(entry.matches)} matches.{pt && <> <button type="button" className="underline underline-offset-4 hover:text-text" onClick={() => setPicked(null)}>Back to current</button></>}</>
+              ? <>Earlier result{entry.outcome ? ` (${entry.outcome})` : ''} · {runLine(entry)}.{pt && <> <button type="button" className="underline underline-offset-4 hover:text-text" onClick={() => setPicked(null)}>Back to current</button></>}</>
               : runLine(shownPt)
           }
         />
       )}
       <AgentActivityPanel issueId={issue.id} />
-      {verified && view === 'verified' && (
+      {verified && view === 'verified' && isCurrent && (
         <p role="status" className="font-display text-2xl font-bold tracking-tight">
-          <span aria-hidden className="text-success">✓ </span>Verified by {issue.approvals.playtest?.by}.
+          <span aria-hidden className="text-success">✓ </span>{realResult ? 'Verified' : 'Demo verification'} by {issue.approvals.playtest?.by}.
         </p>
       )}
       {building && (
@@ -122,45 +129,62 @@ export default function PlaytestResults({ view = 'playtest' }) {
         </p>
       )}
       {busy && !pt && <Skeleton className="h-24" />}
+      {running && issue.run?.kind === 'simulation' && (
+        <div className="space-y-3">
+          <p role="status" className="text-sm text-muted">
+            Comparing {num(issue.run.request.simulations)} battles per configuration for spec v{issue.run.specV}, using seed {issue.run.request.seed}.
+            The baseline and patch use identical matchups. Results will appear here when both batches finish.
+          </p>
+          <Button variant="ghost" onClick={() => returnToDevelopment('Returned to Development to revise the simulation patch')}>Return to Development</Button>
+        </div>
+      )}
 
       {shownPt && (() => { const pt = shownPt; return (
         <div className={`space-y-10 ${running && isCurrent ? 'opacity-50' : ''}`} aria-busy={running && isCurrent}>
-          <SimStats pt={pt} />
-          {pt.compWinRates && <CompWinRates rows={pt.compWinRates} />}
+          {realResult ? <SimulationResults playtest={pt} /> : (
+            <>
+              <p className="rounded-md bg-surface p-4 text-sm text-warning">Illustrative demo results. These values were generated for the prototype and did not come from Hexlab. Return to Development to prepare and test a real stat patch.</p>
+              <SimStats pt={pt} />
+              {pt.compWinRates && <CompWinRates rows={pt.compWinRates} />}
 
-          <VerdictBanner playtest={pt} />
+              <VerdictBanner playtest={pt} />
 
-          <div className="grid gap-8 border-t border-border pt-6 sm:grid-cols-2 lg:grid-cols-3">
-            <StatCard label={pt.metric.name} before={pt.metric.before} after={pt.metric.after} unit={pt.metric.unit} ci={pt.metric.ci} target={pt.metric.target} />
-            {pt.secondary.map((s) => (
-              <StatCard key={s.name} label={s.name} before={s.before} after={s.after} unit={s.unit} ci={s.ci} />
-            ))}
-          </div>
+              <div className="grid gap-8 border-t border-border pt-6 sm:grid-cols-2 lg:grid-cols-3">
+                <StatCard label={pt.metric.name} before={pt.metric.before} after={pt.metric.after} unit={pt.metric.unit} ci={pt.metric.ci} target={pt.metric.target} />
+                {pt.secondary.map((s) => (
+                  <StatCard key={s.name} label={s.name} before={s.before} after={s.after} unit={s.unit} ci={s.ci} />
+                ))}
+              </div>
 
-          <ConvergenceChart playtest={pt} />
+              <ConvergenceChart playtest={pt} />
+            </>
+          )}
 
-          <p className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
-            <span>
-              {num(pt.matches)} bot matches per build (run {pt.runNo}).{' '}
-              {pt.matches < 1000 ? 'Small sample: differences of a few points are noise.' : `95% confidence ±${pt.metric.ci}${pt.metric.unit}.`}
-            </span>
-            {!verified && isCurrent && <Rerun issue={issue} disabled={busy} />}
-          </p>
+          {realResult && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-3 text-sm text-muted">
+              <span>{runLine(pt)} · run {pt.runNo}.</span>
+              {!verified && isCurrent && <Rerun issue={issue} disabled={busy || Boolean(rerunBlockReason)} />}
+            </div>
+          )}
 
-          {isCurrent && (inPlaytest || verified) && (
+          {!realResult && isCurrent && inPlaytest && (
+            <Button onClick={() => returnToDevelopment('Prepare a supported Hexlab patch and replace illustrative playtest data')}>Prepare a real simulation in Development</Button>
+          )}
+
+          {realResult && isCurrent && (inPlaytest || verified) && (
             <ApprovalGate
               approveLabel="Mark verified"
               approval={issue.approvals.playtest}
-              disabled={busy}
-              disabledReason={busy ? 'Wait for the bots to finish.' : null}
-              note={CAUTION[pt.overall] && <p className="text-sm"><span aria-hidden className="text-warning">! </span>{CAUTION[pt.overall]}</p>}
+              disabled={Boolean(blockReason)}
+              disabledReason={blockReason}
+              note={<p className="max-w-3xl text-sm text-muted">Verification records your review of this spec and simulation. Check the edited stats, measured effects, sample counts, and uncertainty before accepting.</p>}
               onApprove={(comment) => {
+                if (reviewBlockReason(issue, pt, simulation?.config) || !canVerifySimulation(issue)) return
                 dispatch({ type: 'PLAYTEST_VERIFY', id: issue.id, comment })
                 navigate(`/issues/${issue.id}/verified`)
               }}
               onReject={(comment) => {
-                dispatch({ type: 'PLAYTEST_REJECT', id: issue.id, comment })
-                backToSpec()
+                returnToDevelopment(comment)
               }}
               rejectLabel="← Back to development"
             />

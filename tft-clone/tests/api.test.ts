@@ -100,8 +100,8 @@ describe('simulation API',()=>{
   }finally{log.mockRestore();}
  });
  it('allows only configured local CORS origins',async()=>{
-  const allowed=await request(app).get('/api/health').set('Origin','http://localhost:5173');
-  expect(allowed.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+  const allowed=await request(app).get('/api/health').set('Origin','http://localhost:5176');
+  expect(allowed.headers['access-control-allow-origin']).toBe('http://localhost:5176');
   const denied=await request(app).get('/api/health').set('Origin','https://untrusted.example');
   expect(denied.headers['access-control-allow-origin']).toBeUndefined();
  });

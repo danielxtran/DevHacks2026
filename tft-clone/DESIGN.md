@@ -1,6 +1,6 @@
 # Hexlab visual foundations
 
-Hexlab is an independent balance simulator. The arena, team builders, patch editor, batch controls, and analytics remain the primary working areas. The visual direction follows the supplied Riot-inspired brief, with independent Hexlab geometry and neutral unit markers.
+Hexlab is an independent balance simulator. The arena, team builders, patch editor, batch controls, and analytics remain the primary working areas. The visual direction follows the supplied Riot-inspired brief, with independent Hexlab geometry; champion portraits use official Data Dragon icons.
 
 ## Reference verification
 
@@ -49,6 +49,6 @@ Use direct action copy: Start battle, Compare patch, Run baseline, Run patched, 
 
 Maintain visible focus, a skip link, named inputs, status announcements, semantic dialogs, and touch-friendly primary actions. Primary button text is white for sufficient contrast on red. Decorative dividers and input boundaries use separate tokens.
 
-`public/hexlab-banner.svg` and `public/hexlab-icon.svg` are original geometric Hexlab assets. Unit markers use Lucide icons and initials. Champion names are sample configuration labels; no Riot logos or champion artwork are loaded.
+`public/hexlab-banner.svg` and `public/hexlab-icon.svg` are original geometric Hexlab assets. Champion portraits load official square icons at runtime from Riot's Data Dragon CDN (pinned version in `src/components/Portrait.tsx`, keyed by each champion's `portrait` field), as permitted for fan projects by Riot's Legal Jibber Jabber policy; the images are not bundled in this repository. Item icons load the same way, mapped from Hexlab item IDs to League item IDs in `src/components/EquipmentIcon.tsx` (kept out of `items.json` so the baseline fingerprint is unchanged). Krug and any icon that fails to load fall back to Lucide glyphs with initials. No Riot logos are used.
 
 The mechanical style scan flags Inter and Space Grotesk as common font choices. They are intentional here because both are explicitly requested in the brief.

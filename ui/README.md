@@ -2,7 +2,7 @@
 
 Front end for our Riot Track · Prompt 02 (Agentic Development) project. Agents collect player feedback from Reddit and X, turn the biggest issues into editable change specs, build the change, and check it with bot playtests. A person has to approve every step, because the prompt's rule is *"Verify the result yourself. Don't trust the agent saying it's done."*
 
-This is a working prototype. Agent output, posts, and playtest results are simulated in the browser, so the whole flow can be demoed without a backend.
+Feedback and spec-writing remain a browser prototype. Moving a spec from Development to Testing now calls the real Hexlab simulation API in `tft-clone/` and displays measured before/after results. Existing seeded playtests are labeled illustrative and cannot verify a new change.
 
 ## Quick start
 
@@ -12,9 +12,19 @@ npm install        # first time only
 npm run dev        # → http://localhost:5173
 ```
 
-- Port 5173 is fixed (`strictPort`). The other apps in this repo use 5174 (`mockreddit`) and 5175 (`mockr`).
+In a second terminal, start the simulation API:
+
+```bash
+cd tft-clone
+npm install        # first time only
+npm run dev:api    # → http://127.0.0.1:3002
+```
+
+- Port 5173 is fixed (`strictPort`). Other apps use 5174 (`mockreddit`), 5175 (`mockr`), and 5176 (Hexlab's standalone dashboard).
+- Vite proxies `/hexlab-api/*` to `http://127.0.0.1:3002/api/*` in dev and preview. For a separately hosted frontend, set `VITE_HEXLAB_API_URL` in `ui/.env.local` to the simulator's API base URL (ending in `/api`) before building, and configure the simulator's `CORS_ORIGINS` for that frontend.
 - `npm run build && npm run preview` serves the production build on 5173 too.
 - `npm run lint` runs oxlint (currently clean).
+- `npm test` checks API contracts, version binding, retries, result handling, and persistence recovery. With both services running, `HEXLAB_TEST_URL=http://127.0.0.1:5173 npm test` also runs a real API-to-review integration test.
 
 ## The flow
 
@@ -22,7 +32,7 @@ npm run dev        # → http://localhost:5173
 flowchart LR
   P[Reddit + X posts] -->|Agent 1 · Collector| I[Issues]
   I -->|assign a dev, push to development| D[Development<br/>Agent 2 · Spec Writer]
-  D -->|approve spec| T[Testing<br/>Agent 3 · Builder, then Playtest Bots]
+  D -->|approve numeric patch| T[Testing<br/>Hexlab before/after simulation]
   T -->|mark verified| C[Closed]
   T -->|back to development| D
   I -->|reject issue| C
@@ -32,7 +42,7 @@ flowchart LR
 |---|---|---|---|
 | **Issues** | Feedback (Identification) | `/issues/:id` | Read the sources, edit tags, assign devs, push to development or reject |
 | **Development** | Spec | `/issues/:id/spec` | Edit the `.md` spec or prompt the agent, then approve it |
-| **Testing** | Playtest | `/issues/:id/playtest` | Review the simulated results, then verify or send back |
+| **Testing** | Playtest | `/issues/:id/playtest` | Review measured stat changes and gameplay results, then verify or send back |
 | **Closed** | Verified (or rejected) | `/issues/:id/verified` | Read-only result; Push to playtest patch (not connected yet) |
 
 Nothing moves on an agent's say-so. Only a person's button press moves an issue.
@@ -93,27 +103,29 @@ Every issue page has the title (click *Edit* to rename), a **← Board** link, a
 - Other tabs: **Summary** (key points and a diagram of affected systems), **Full spec**, **Compare** (diff any two versions), **Edit** (structured form).
 - **Ask the Spec Writer** (right side): chat history, quick suggestions, and a prompt box that grows as you type. While the agent rewrites, the editor is read-only and says "Agent is rewriting…".
 - **Rollback:** editing or prompting from an older version *k* discards the versions after *k*; the new version becomes *k+1*. The page warns you first.
-- **Approve vN & send to playtest**, **Request changes**, or **Reject spec** (a comment is required for the last two).
+- **Simulation patch:** attach exact champion, item, or monster numeric edits, inspect baseline values, and choose 100/1,000/5,000/10,000 battles per configuration, seed, and PvP/PvE mode. Unsupported mechanics such as stuns and traits cannot be inferred from prose. Monster edits require PvE.
+- **Approve patch & send to Testing** freezes the patch and baseline with its approved spec version and starts the real evaluation. Numeric settings can also be saved as a new version first. Editing `spec.md` alone does not change the executable patch.
+- **Request changes** or **Reject spec** requires a comment.
 
 #### Playtest (Testing): `/issues/:id/playtest`
 
-1. Approving the spec starts the **Builder** in the background (no separate build page). Its log streams at the top.
-2. If a check fails, the Builder retries on its own, up to 3 attempts. After that, the page shows the error with **Retry** and **Back to spec**.
-3. Once every check passes, **Playtest Bots** play 2,000 matches with 8 bot players each.
-
-Then the page shows, top to bottom:
+Approving the numeric patch calls Hexlab, which applies edits to a baseline copy and runs identical seeded matchups before and after. This path does not claim to build code, run generated acceptance checks, or permanently modify game files. The page shows:
 
 - **Version** dropdown: every playtest run, labeled like "Spec v2 · run 1 · current" or "Spec v1 · run 1 · rejected". Older runs are read-only.
-- **Stat cards**: matches run, avg damage dealt, avg time alive (each with "was …").
-- **Win rate per team comp**: before (grey) and after (red) bars per comp, each with a readout like `50.9% → 52.6% (+1.7%)`, and a table view.
-- **Verdict**: was the complaint backed by live stats, and did the change move the metric toward its target?
-- The headline metric, a convergence chart, and a **Re-run** control (200 to 5,000 matches).
-- **Mark verified** or **← Back to development** (reverts the change; comment required).
-- **Code change** (collapsed): what the Builder claimed, each check, earlier failed attempts, and the file diff.
+- **Stat changes tested:** exact baseline values, patched values, and numeric deltas.
+- **Performance comparison:** paired baseline/patched bar charts for champion, item, and composition win rates, with measured 95% intervals; a second chart switches between damage dealt, damage taken, and survival time. Zero-sample entities are omitted, and compositions show the eight most-sampled groups. Existing saved real results display these charts without rerunning.
+- **Champion performance:** before/after win rates, damage dealt/taken, and time alive, with eligible sample counts and descriptive 95% intervals. Rates are 0–100 percent; rate deltas are percentage points; time is seconds.
+- **Item and composition performance**, plus clear rate for PvE. No synthetic convergence series or live-telemetry verdict is added to real results.
+- **Watch replays in Hexlab ↗** opens the Hexlab dashboard (`http://127.0.0.1:5176`, override with `VITE_HEXLAB_APP_URL`) on the exact experiment: same baseline, patch, seed, battle count, and mode. Every game can be replayed baseline vs. patched, filtered to the patched champion or to games whose winner changed. Requires the Hexlab dashboard (`npm run dev:web` in `tft-clone`).
+- **Re-run** preserves the approved patch, baseline, seed, and mode; only the supported battle count changes. Each completed run is retained.
+- **Mark verified** accepts only completed real evidence matching the approved patch. Pending work, failed reruns, stale versions, malformed output, and baseline mismatches block verification.
+- **Retry** and **Back to development** recover from failures. Returning to Development ignores late responses; reloading an unfinished request creates an explicit retryable interruption.
+
+Results and human review state use the dashboard's existing localStorage persistence, not shared Supabase workflow tables. Historical results retain their own configuration snapshot. Approximate marginal intervals do not establish that a patch improves balance.
 
 #### Verified: `/issues/:id/verified`
 
-The final result, who verified it, the code change, and a **Push to playtest patch** button. It's disabled on purpose: deploying isn't connected yet.
+The reviewed simulation, who verified it, and a **Push to playtest patch** button. It's disabled on purpose: deploying isn't connected yet.
 
 ## Tags
 
@@ -149,11 +161,11 @@ Fix types must come from the list. Other names are saved as custom tags for that
 
 ## Demo walkthrough (≈3 minutes)
 
-1. **List**: "Ironvane's Shield Bash stun lasts too long" is #1. Optionally merge "Ironvane stun is broken" into it from the ⋯ menu.
-2. Open it. Browse the Reddit and X posts in **Sources** and check the live-stat sanity check. Priya is already checked under **Assign to**, so click **Push to development →**.
-3. **Spec**: watch the Spec Writer draft it, then ask it to "Make this a smaller nerf" or edit `spec.md`. Switch versions with the dropdown.
-4. **Approve & send to playtest**. The Builder's first attempt says "done" but fails the *Tooltip ↔ data sync* check, so it retries. Attempt 2 passes and the bots start.
-5. Read the stat cards, comp bars, and verdict. Click **Mark verified** to land on the Verified page.
+1. Start the UI and Hexlab API, then open the **Development** card "Evaluate a smaller attack-damage value for Yasuo" (`/issues/iss-hexlab-yasuo/spec`). Existing browser work is preserved when this example is added.
+2. Inspect the patch: Yasuo attack damage 25 → 20, seed 42, and 1,000 battles per configuration. Adjust the patch or sample count if desired.
+3. Click **Approve patch & send to Testing**. Wait for the actual baseline and patched batches to finish.
+4. Review the tested input changes, champion metrics, sample counts, and item/composition details. Rerun with another supported count if needed.
+5. **Mark verified**, or return to Development with a comment and revise the patch.
 
 The other seeded issues sit at every stage:
 - a spec waiting for review
@@ -168,7 +180,7 @@ The other seeded issues sit at every stage:
 - Clear issues (shows the empty state)
 - Reset demo data
 
-Demo state is saved in the browser's localStorage under `STORAGE_KEY` (`src/store/reducer.js`). Bumping that key resets everyone's saved demo.
+State, including real simulation history, is saved in localStorage under `STORAGE_KEY` (`src/store/reducer.js`). Reset demo data also discards that browser's simulation history. Demo failure controls apply to the remaining simulated agents, not real Hexlab runs.
 
 ## Look and feel
 
@@ -215,6 +227,8 @@ Stack: Vite 8 · React 19 · React Router 7 · Tailwind CSS 4 · Recharts · rea
 
 ## Connecting the real backend
 
+- **Simulation:** already connected through `src/simulation/client.js`. Real runs use `kind: 'simulation'`, contain a frozen request/configuration snapshot, and resolve through explicit success/failure actions rather than timer ticks. `spec.simulation` is the structured handoff for future backend-supplied specs.
+- **Persistence:** move simulation requests, results, and review decisions from localStorage to authoritative backend storage when shared workflow persistence is implemented.
 - **Agents:** replace the reducer's simulated `run` (and `useAgentStream`) with server events. Keep the shapes (`Issue`, `specVersions[]`, `build`, `builds[]`, `playtest`, `playtests[]`) and the UI keeps working. Everything is keyed by issue ID.
 - **Posts:** swap `makeClusterPosts` for a paginated `GET /issues/:id/posts?platform=&q=&cursor=` sorted by score, and fill in each post's link.
 - **Gate:** the "at least one dev assigned" rule is enforced in the reducer (`SEND_TO_SPEC`), not only in the buttons. Keep it server-side too.

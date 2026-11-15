@@ -1,4 +1,4 @@
-import { makeSeed } from '../data/seed'
+import { makeSeed } from '../data/seed.js'
 import {
   makeSpec,
   reviseSpec,
@@ -8,8 +8,9 @@ import {
   reviseScript,
   buildScript,
   playtestScript,
-} from '../data/generators'
-import { AGENTS, ME, devLabel, tagInfo } from '../data/constants'
+} from '../data/generators.js'
+import { AGENTS, ME, devLabel, tagInfo } from '../data/constants.js'
+import { validateSimulationPlan, validateSimulationResult } from '../simulation/client.js'
 
 export const STORAGE_KEY = 'agentic-pipeline:v11'
 export const TICK_MS = 650
@@ -49,6 +50,34 @@ const FAILURES = {
 }
 
 const NO_FAIL = { failNext: false }
+
+const sameRequest = (a, b) => Boolean(a && b && a.baselineConfigId === b.baselineConfigId && a.seed === b.seed &&
+  a.simulations === b.simulations && a.mode === b.mode && Array.isArray(a.changes) && Array.isArray(b.changes) &&
+  a.changes.length === b.changes.length && a.changes.every((change, index) =>
+    ['type', 'id', 'stat', 'value'].every(key => change[key] === b.changes[index][key])))
+
+function simulationRun(issue, request, configSnapshot, specV, runNo, runId) {
+  const next = startRun(issue, {
+    id: runId ?? globalThis.crypto.randomUUID(),
+    agent: 'playtest', kind: 'simulation', specV, runNo,
+    request: structuredClone(request), configSnapshot: structuredClone(configSnapshot),
+    script: ['Validated the numeric patch against the baseline.', 'Running the same seeded matchups before and after the patch…'],
+    idx: 1,
+  }, NO_FAIL)
+  return { ...next, run: { ...next.run, idx: 1 } }
+}
+
+export function canVerifySimulation(issue) {
+  const pt = issue.playtest
+  const approvedPlan = approvedSpec(issue)?.simulation
+  return issue.stage === 'playtest' && !issue.run && !issue.error && issue.status === 'needs_review' &&
+    pt?.source === 'hexlab' && pt.specV === issue.approvals.spec?.v &&
+    pt.specV === issue.specVersions.length && sameRequest({ ...pt.request, simulations: approvedPlan?.simulations }, approvedPlan) &&
+    validateSimulationPlan(pt.request, pt.configSnapshot).valid && validateSimulationResult(pt.result, pt.request).valid &&
+    pt.result?.baselineConfigId === pt.request.baselineConfigId &&
+    sameRequest({ ...pt.result, changes: pt.result.appliedChanges }, pt.request) &&
+    issue.playtests?.at(-1)?.ts === pt.ts && issue.playtests.at(-1).outcome === null
+}
 
 // Applies the finished agent run's output to the issue.
 function completeRun(issue) {
@@ -152,7 +181,7 @@ export function reducer(state, action) {
     case 'TICK': {
       let changed = false
       const issues = state.issues.map((issue) => {
-        if (!issue.run) return issue
+        if (!issue.run || issue.run.kind === 'simulation') return issue
         changed = true
         const idx = issue.run.idx + 1
         if (idx > issue.run.script.length) return completeRun(issue)
@@ -177,7 +206,7 @@ export function reducer(state, action) {
       }
       if (!state.issues.length) return state
       const n = 1 + Math.floor(Math.random() * 4)
-      const feedback = state.issues.filter((i) => !i.dismissed && !i.mergedInto && i.stage !== 'verified')
+      const feedback = state.issues.filter((i) => !i.dismissed && !i.mergedInto && i.stage !== 'verified' && !i.change?.simulation)
       const target = feedback[Math.floor(Math.random() * feedback.length)]
       const okSources = Object.keys(state.sourceStatus).filter((k) => state.sourceStatus[k].state === 'ok')
       const src = okSources[Math.floor(Math.random() * okSources.length)]
@@ -202,6 +231,7 @@ export function reducer(state, action) {
       )
 
     case 'SPEC_CHAT':
+      if (state.issues.find(i => i.id === id)?.stage !== 'spec' || state.issues.find(i => i.id === id)?.run) return state
       // Prompting from an older version k discards versions after k; the rewrite becomes k+1 (spec 6.2.2).
       return consumeFail(
         updateIssue(state, id, (i) =>
@@ -220,16 +250,24 @@ export function reducer(state, action) {
 
     case 'SPEC_EDIT':
       return updateIssue(state, id, (i0) => {
+        if (i0.stage !== 'spec' || i0.run) return i0
         const i = rollBack(i0, action.fromV)
         const v = i.specVersions.length + 1
         const base = i.specVersions.at(-1)
+        let nextSpec = action.spec ?? base.spec
+        if (action.spec && nextSpec.simulation && i.change.simulationTarget && nextSpec.param.after !== base.spec.param.after) {
+          const target = i.change.simulationTarget
+          nextSpec = { ...nextSpec, simulation: { ...nextSpec.simulation, changes: nextSpec.simulation.changes.map(change =>
+            change.type === target.type && change.id === target.id && change.stat === i.change.key
+              ? { ...change, value: nextSpec.param.after } : change) } }
+        }
         return log(
           {
             ...i,
             status: 'needs_review',
             specVersions: [
               ...i.specVersions,
-              { v, author: 'human', authorName: ME, spec: action.spec ?? base.spec, markdown: action.markdown, note: action.note || 'Direct edit', ts: now() },
+              { v, author: 'human', authorName: ME, spec: nextSpec, markdown: action.markdown ?? (action.preserveMarkdown ? base.markdown : undefined), note: action.note || 'Direct edit', ts: now() },
             ],
           },
           'human',
@@ -239,31 +277,59 @@ export function reducer(state, action) {
       })
 
     case 'SPEC_APPROVE':
-      return consumeFail(
-        updateIssue(state, id, (i) => {
-          const v = i.specVersions.length
-          const approved = { ...i, stage: 'playtest', build: null, playtest: null, approvals: { ...i.approvals, spec: { by: ME, ts: now(), v, comment: action.comment } } }
-          const logged = log(approved, 'human', ME, `Approved spec v${v}. Builder started; playtest follows when checks pass${action.comment ? `: “${action.comment}”` : ''}`)
-          return startRun(logged, { agent: 'build', kind: 'build', attempt: 1, script: buildScript(logged, approvedSpec(logged), 1) }, demo)
-        }),
-      )
+      return updateIssue(state, id, (i) => {
+        if (i.stage !== 'spec' || i.run || i.error || !i.specVersions.length ||
+          !validateSimulationPlan(action.plan, action.config).valid) return i
+        const plan = structuredClone(action.plan)
+        let specVersions = i.specVersions
+        if (!sameRequest(latestSpec(i)?.simulation, plan)) {
+          specVersions = [...specVersions, { v: specVersions.length + 1, author: 'human', authorName: ME,
+            spec: { ...latestSpec(i), simulation: plan }, markdown: specVersions.at(-1).markdown,
+            note: 'Configured the numeric simulation patch', ts: now() }]
+        }
+        const v = specVersions.length
+        const approved = { ...i, specVersions, stage: 'playtest', build: null, playtest: null,
+          approvals: { spec: { by: ME, ts: now(), v, comment: action.comment } } }
+        const runNo = Math.max(0, ...(i.playtests ?? []).map(p => p.runNo ?? 0)) + 1
+        return simulationRun(log(approved, 'human', ME, `Approved spec v${v} and started a real Hexlab comparison.`), plan, action.config, v, runNo, action.runId)
+      })
 
     case 'SPEC_REJECT':
       return updateIssue(state, id, (i) => log({ ...i, stage: 'feedback', status: 'rejected', run: null }, 'human', ME, `Rejected spec: “${action.comment}”`))
 
     case 'PLAYTEST_RERUN':
-      return consumeFail(
-        updateIssue(state, id, (i) => {
-          const runNo = (i.playtest?.runNo ?? 0) + 1
-          const next = log(i, 'human', ME, `Re-ran playtest with ${action.matches.toLocaleString()} matches`)
-          return startRun(next, { agent: 'playtest', kind: 'playtest', matches: action.matches, runNo, script: playtestScript(action.matches) }, demo)
-        }),
-      )
+      return updateIssue(state, id, (i) => {
+        if (i.stage !== 'playtest' || i.run || i.playtest?.source !== 'hexlab' ||
+          i.playtest.specV !== i.approvals.spec?.v) return i
+        const plan = { ...i.playtest.request, simulations: action.matches }
+        if (!validateSimulationPlan(plan, action.config).valid) return i
+        const specV = i.approvals.spec.v
+        const runNo = Math.max(0, ...(i.playtests ?? []).map(p => p.runNo ?? 0)) + 1
+        return simulationRun(log(i, 'human', ME, `Started run ${runNo} with ${action.matches.toLocaleString()} games per configuration.`), plan, action.config, specV, runNo, action.runId)
+      })
+
+    case 'SIMULATION_SUCCEEDED':
+      return updateIssue(state, id, (i) => {
+        const run = i.run
+        if (i.stage !== 'playtest' || run?.kind !== 'simulation' || run.id !== action.runId ||
+          run.specV !== i.approvals.spec?.v || !validateSimulationResult(action.result, run.request).valid) return i
+        const entry = { source: 'hexlab', runNo: run.runNo, specV: run.specV, request: run.request,
+          configSnapshot: run.configSnapshot, result: action.result, ts: now(), outcome: null }
+        return log({ ...i, run: null, error: null, status: 'needs_review', playtest: entry,
+          playtests: [...(i.playtests ?? []), entry] }, 'agent', 'Hexlab', `Completed ${run.request.simulations.toLocaleString()} games per configuration. Results are ready for review.`)
+      })
+
+    case 'SIMULATION_FAILED':
+      return updateIssue(state, id, (i) => {
+        if (i.run?.kind !== 'simulation' || i.run.id !== action.runId) return i
+        return log({ ...i, status: 'error', run: null, error: { title: 'Simulation could not finish',
+          message: action.message, run: i.run } }, 'agent', 'Hexlab', 'Simulation failed. Retry or return to Development to review the patch.')
+      })
 
     case 'PLAYTEST_VERIFY':
-      return updateIssue(state, id, (i) =>
-        log({ ...i, stage: 'verified', status: 'done', playtests: markLast(i.playtests, 'verified'), approvals: { ...i.approvals, playtest: { by: ME, ts: now(), comment: action.comment } } }, 'human', ME, `Marked verified${action.comment ? `: “${action.comment}”` : ''}`),
-      )
+      return updateIssue(state, id, (i) => canVerifySimulation(i)
+        ? log({ ...i, stage: 'verified', status: 'done', playtests: markLast(i.playtests, 'verified'), approvals: { ...i.approvals, playtest: { by: ME, ts: now(), comment: action.comment } } }, 'human', ME, `Marked verified${action.comment ? `: “${action.comment}”` : ''}`)
+        : i)
 
     case 'PLAYTEST_REJECT':
       return updateIssue(state, id, (i) =>
@@ -271,6 +337,14 @@ export function reducer(state, action) {
       )
 
     case 'RETRY_RUN':
+      if (state.issues.find(i => i.id === id)?.error?.run?.kind === 'simulation') {
+        return updateIssue(state, id, (i) => {
+          const run = i.error.run
+          if (i.stage !== 'playtest' || i.run || run.specV !== i.approvals.spec?.v ||
+            !validateSimulationPlan(run.request, action.config).valid) return i
+          return simulationRun(log(i, 'human', ME, 'Retried the Hexlab comparison.'), run.request, action.config, run.specV, run.runNo, action.runId)
+        })
+      }
       return consumeFail(
         updateIssue(state, id, (i) => (i.error?.run ? log(startRun(i, i.error.run, demo), 'human', ME, `Retried ${AGENTS[i.error.run.agent].short}`) : i)),
       )

@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173**. The API listens at **http://127.0.0.1:3001**. Vite proxies `/api` to Express. Run either independently with `npm run dev:web` or `npm run dev:api`.
+Open **http://localhost:5176**. The API listens at **http://127.0.0.1:3002**. Vite proxies `/api` to Express. Run either independently with `npm run dev:web` or `npm run dev:api`.
 
 ```sh
 npm test
@@ -19,7 +19,7 @@ npm run build
 npm start
 ```
 
-`build` type-checks all application, server, and test TypeScript, then creates the browser bundle in `dist/`. `start` starts the API; it does not serve `dist/`. Preview the built web app using `npx vite preview` while the API is running. The dashboard runs its own browser worker and does not require the API for battles or analytics.
+`build` type-checks all application, server, and test TypeScript, then creates the browser bundle in `dist/`. `start` starts the API; it does not serve `dist/`. Preview the built web app at **http://localhost:4176** using `npx vite preview` while the API is running. The dashboard runs its own browser worker and does not require the API for battles or analytics.
 
 For a headless evaluation with JSON output:
 
@@ -45,8 +45,8 @@ Batch experiments sample the full roster; they do not repeat only the manually c
 ### Health and configuration
 
 ```sh
-curl http://127.0.0.1:3001/api/health
-curl http://127.0.0.1:3001/api/config
+curl http://127.0.0.1:3002/api/health
+curl http://127.0.0.1:3002/api/config
 ```
 
 `GET /api/config` returns `id`, `baselineConfigId`, `champions`, `items`, and `monsters`. Use the IDs and bounds in this document to construct patches. The baseline identifier includes a deterministic content fingerprint, so your agent can record which baseline it evaluated.
@@ -54,7 +54,7 @@ curl http://127.0.0.1:3001/api/config
 ### Evaluate a patch
 
 ```sh
-curl -X POST http://127.0.0.1:3001/api/simulate \
+curl -X POST http://127.0.0.1:3002/api/simulate \
   -H 'Content-Type: application/json' \
   --data-binary @examples/yasuo-nerf.json
 ```
@@ -98,7 +98,11 @@ Each metric includes `samples`, `wins`, `draws`, `winRate`, `confidenceInterval`
 
 Invalid IDs, unknown fields, invalid stats, non-numeric/non-finite values, and malformed JSON return **400**. Bodies are limited to 64 KB (**413**). Two evaluations can run concurrently; excess requests receive **429** and should retry. Evaluation failures return **500**. API evaluations have a 120-second limit and run in Node worker threads so the server remains responsive. Baseline files are never changed by an API request.
 
-Local CORS origins include localhost/127.0.0.1 ports 5173 and 4173. Override with a comma-separated `CORS_ORIGINS` environment variable. Change the API port using `PORT` (update the Vite proxy when changing it). The API binds to loopback by default; no authentication is provided for this local hackathon tool.
+Local CORS origins include localhost/127.0.0.1 ports 5176 (Hexlab), 4176 (Hexlab preview), and 5173 (pipeline UI). Override with a comma-separated `CORS_ORIGINS` environment variable. Change the API port using `PORT` (update the Vite proxy when changing it). The API binds to loopback by default; no authentication is provided for this local hackathon tool.
+
+### Patch replays
+
+Open the dashboard with `?replay=<url-encoded JSON>` to watch the individual games behind an evaluation. The JSON is the `/api/simulate` body plus `baselineConfigId` (from `/api/config`); optional `&game=<1-based index>` and `&focus=<championId>` preselect a game and champion filter. The dashboard regenerates the identical matchups with `generateMatchups`, replays each one with `simulateBattle` against the baseline and patched configurations side by side, and scans every game in a worker so you can filter to games whose winner changed. Links for a different baseline fingerprint are rejected, because their replays would not match the measured results. Patchwork's Testing page links here automatically.
 
 ### Teammate integration
 

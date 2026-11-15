@@ -2,7 +2,7 @@
 // The demo uses seeded feedback for platforms we
 // don't scrape live, and says so in the UI.
 
-import { makeSpec, makeBuild, makePlaytest, rng, specScript, buildScript } from './generators'
+import { makeSpec, makeBuild, makePlaytest, rng, specScript, buildScript } from './generators.js'
 
 const H = 3600 * 1000
 const ago = (hours) => new Date(Date.now() - hours * H).toISOString()
@@ -60,6 +60,31 @@ function version(v, author, spec, note, hoursAgo) {
 
 export function makeSeed() {
   const issues = []
+
+  // Supported numeric experiment. Feedback is illustrative; gameplay is measured in Testing.
+  const yasuoIssue = baseIssue({
+    id: 'iss-hexlab-yasuo', game: 'Hexlab', title: 'Evaluate a smaller attack-damage value for Yasuo',
+    summary: 'Test a proposed Yasuo attack-damage change from 25 to 20 using identical baseline and patched matchups. The Testing view will measure its effect on the roster.',
+    stage: 'spec', status: 'needs_review', mentions: 0, firstSeen: ago(1), lastMention: ago(1),
+    trend: Array(14).fill(0), sources: {},
+    stat: { label: 'Yasuo win rate', value: null, unit: '%', simulationOnly: true, note: 'Run the comparison to measure this. No live-game telemetry is connected.' },
+    change: {
+      label: 'Yasuo attack damage', problem: 'Evaluate whether reducing Yasuo’s attack damage changes simulated combat performance. This is an experiment, not a confirmed balance problem.',
+      rationale: 'Compare damage, survival, and win rates across the same seeded matchups before deciding whether to keep the change.',
+      file: 'tft-clone/src/config/champions.json', key: 'attackDamage', before: 25, proposed: 20, ideal: 20, unit: '',
+      systems: ['Champion stats', 'Combat simulation'], risks: ['Yasuo may become less effective; changes may also shift other champions’ results.'],
+      metric: { name: 'Yasuo win rate', unit: '%', before: 50, target: [48, 52], sd: 50 },
+      context: { id: 'yasuo', attackDamage: 25 }, simulationTarget: { type: 'unit', id: 'yasuo' },
+      simulation: { changes: [{ type: 'unit', id: 'yasuo', stat: 'attackDamage', value: 20 }], simulations: 1000, seed: 42, mode: 'pvp' },
+    },
+    evidence: [], chat: [], audit: [{ ts: ago(1), kind: 'human', actor: 'You', text: 'Prepared a numeric Hexlab experiment for simulation review.' }],
+  })
+  const yasuoSpec = makeSpec(yasuoIssue)
+  yasuoSpec.metrics = ['Measure before/after champion and composition win rates, damage, and survival using identical matchups.', 'Inspect sample counts and descriptive confidence intervals before making a human decision.']
+  yasuoSpec.plan = ['Apply the proposed numeric patch to a copy of the Hexlab baseline.', 'Run the same seeded matchups with and without the patch.', 'Review measured differences in Testing.']
+  yasuoSpec.summary = ['Proposed attack damage: 25 → 20.', 'Run a real, reproducible comparison in Hexlab.', 'Review the observed impact; no improvement is assumed.']
+  yasuoIssue.specVersions = [version(1, 'human', yasuoSpec, 'Ready for simulation review', 1)]
+  issues.push(yasuoIssue)
 
   // 1 — the demo issue: starts at the very beginning of the pipeline.
   issues.push(
@@ -469,11 +494,12 @@ export function makeSeed() {
   )
 
   // Assigned devs: the people already working on each issue in the demo data.
-  const ASSIGNED = { 'iss-101': ['priya'], 'iss-102': ['marco', 'ana'], 'iss-103': ['jun'], 'iss-104': ['dev'], 'iss-107': ['dev'], 'iss-108': ['dev'] }
+  const ASSIGNED = { 'iss-hexlab-yasuo': ['dev'], 'iss-101': ['priya'], 'iss-102': ['marco', 'ana'], 'iss-103': ['jun'], 'iss-104': ['dev'], 'iss-107': ['dev'], 'iss-108': ['dev'] }
   for (const i of issues) i.devs = ASSIGNED[i.id] ?? []
 
   // Subject tags (ids from TAGS in constants.js).
   const TAGGED = {
+    'iss-hexlab-yasuo': ['unit-nerf', 'custom:unit:Yasuo'],
     'iss-101': ['unit-nerf', 'ironvane', 'shield-bash', 'vanguard'],
     'iss-102': ['bug-fix', 'kestrel', 'skyward-dash', 'skirmisher', 'map'],
     'iss-103': ['system-change', 'matchmaking'],

@@ -33,5 +33,6 @@ export function useAgentStream(issueId) {
     current: run.script[Math.min(run.idx, run.script.length - 1)],
     elapsedMs: Math.max(0, now - new Date(run.startedAt).getTime()),
     progress: run.idx / run.script.length,
+    indeterminate: run.kind === 'simulation',
   }
 }

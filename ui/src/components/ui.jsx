@@ -14,6 +14,7 @@ export function Button({ variant = 'secondary', size = 'md', className = '', to,
   const pad = variant === 'ghost' || variant === 'danger' ? 'h-8 px-0 text-sm' : sizes[size]
   const cls = `inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors disabled:cursor-not-allowed ${pad} ${BTN[variant]} ${className}`
   if (to) return <Link to={to} className={cls} {...rest}>{children}</Link>
+  if (rest.href) return <a className={cls} {...rest}>{children}</a>
   return <button className={cls} {...rest}>{children}</button>
 }
 

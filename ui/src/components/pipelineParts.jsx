@@ -64,8 +64,8 @@ export function AgentActivityPanel({ issueId }) {
         <span className="min-w-0 flex-1 truncate text-muted" aria-live="polite">{a.current}</span>
         <span className="font-mono text-xs text-muted">{duration(a.elapsedMs)}</span>
       </div>
-      <div className="mt-2.5 h-px bg-border" role="progressbar" aria-label="Agent progress" aria-valuenow={Math.round(a.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
-        <div className="h-px bg-info transition-all duration-500" style={{ width: `${a.progress * 100}%` }} />
+      <div className="mt-2.5 h-px bg-border" role="progressbar" aria-label={a.indeterminate ? 'Simulation running' : 'Agent progress'} aria-valuenow={a.indeterminate ? undefined : Math.round(a.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
+        <div className={`h-px bg-info ${a.indeterminate ? 'w-full animate-pulse-soft' : 'transition-all duration-500'}`} style={a.indeterminate ? undefined : { width: `${a.progress * 100}%` }} />
       </div>
       {a.lines.length > 0 && (
         <ol ref={logRef} className="mt-2.5 max-h-24 space-y-0.5 overflow-y-auto font-mono text-xs text-muted">

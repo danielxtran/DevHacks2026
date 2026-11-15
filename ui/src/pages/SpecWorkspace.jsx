@@ -7,6 +7,8 @@ import { AgentActivityPanel, ApprovalGate } from '../components/pipelineParts'
 import { Button, ErrorPanel, Skeleton, StateView, VersionPicker } from '../components/ui'
 import DiffView from '../components/DiffView'
 import { stamp, timeAgo } from '../components/format'
+import SimulationPatchEditor from '../components/SimulationPatchEditor'
+import { validateSimulationPlan } from '../simulation/client.js'
 
 const LIST_FIELDS = [
   ['systems', 'Affected systems'],
@@ -154,7 +156,7 @@ function VersionHistory({ issue }) {
           <div className="mb-3 flex items-center gap-2 text-sm text-muted">
             Compare {pick(a, setA, 'From version')} → {pick(b, setB, 'To version')}
           </div>
-          <DiffView oldValue={mdOf(vs[a - 1])} newValue={mdOf(vs[b - 1])} leftTitle={`v${a}`} rightTitle={`v${b}`} />
+          <DiffView oldValue={comparisonOf(vs[a - 1])} newValue={comparisonOf(vs[b - 1])} leftTitle={`v${a}`} rightTitle={`v${b}`} />
         </div>
       ) : (
         <p className="text-sm text-muted">Edit the spec or ask the agent for a rewrite to compare versions here.</p>
@@ -164,6 +166,7 @@ function VersionHistory({ issue }) {
 }
 
 const mdOf = (version) => version.markdown ?? specToText(version.spec)
+const comparisonOf = version => `${mdOf(version)}\n\n## Executable simulation patch\n${JSON.stringify(version.spec.simulation ?? null, null, 2)}`
 
 /** The .md spec (spec 6.2.2): the main focus. Fully editable, mono; saving makes a new version. */
 function MarkdownEditor({ issue, version, latestV, readOnly, rewriting, onCommit }) {
@@ -279,11 +282,12 @@ function SpecChat({ issue, disabled, fromV, latestV, onCommit }) {
 
 export default function SpecWorkspace() {
   const { issue } = useOutletContext()
-  const { dispatch } = usePipeline()
+  const { dispatch, simulation } = usePipeline()
   const navigate = useNavigate()
   const [view, setView] = useState('md')
   const [editing, setEditing] = useState(false)
   const [picked, setPicked] = useState(null) // null = always show the latest version
+  const [simulationDraft, setSimulationDraft] = useState(null)
   const latest = issue.specVersions.at(-1)
   const shown = (picked && issue.specVersions[picked - 1]) || latest
   const viewingOld = shown && latest && shown.v !== latest.v
@@ -291,6 +295,13 @@ export default function SpecWorkspace() {
   const running = issue.run?.agent === 'spec'
   const inSpec = issue.stage === 'spec'
   const locked = !inSpec || running
+  const planKey = `${issue.id}:${shown?.v}`
+  const plan = simulationDraft?.key === planKey ? simulationDraft.plan : {
+    changes: [], simulations: 1000, seed: 42, mode: 'pvp', ...spec?.simulation,
+    baselineConfigId: spec?.simulation?.baselineConfigId ?? simulation.config?.baselineConfigId ?? '',
+  }
+  const validation = validateSimulationPlan(plan, simulation.config)
+  const canTest = !locked && !viewingOld && !editing && !simulation.loading && !simulation.error && validation.valid && !issue.error
 
   if (!spec && !running && !issue.error) {
     return (
@@ -375,13 +386,40 @@ export default function SpecWorkspace() {
       </div>
 
       {spec && (
+        <div className="space-y-4">
+          <SimulationPatchEditor
+            plan={plan}
+            config={simulation.config}
+            loading={simulation.loading}
+            error={simulation.error}
+            onReload={simulation.reload}
+            disabled={locked || viewingOld || editing}
+            onChange={next => setSimulationDraft({ key: planKey, plan: next })}
+          />
+          {!locked && !viewingOld && !editing && validation.valid && JSON.stringify(plan) !== JSON.stringify(spec.simulation) && (
+            <Button size="sm" onClick={() => {
+              dispatch({ type: 'SPEC_EDIT', id: issue.id, spec: { ...spec, simulation: plan }, preserveMarkdown: true, note: 'Saved the numeric simulation patch' })
+              setPicked(null)
+            }}>Save simulation patch as a new version</Button>
+          )}
+          <p className="max-w-prose text-xs leading-relaxed text-muted">
+            The simulation patch is the executable change attached to this spec. Editing spec.md alone does not change these numeric values. Sending to Testing saves the patch with the approved spec version.
+          </p>
+        </div>
+      )}
+
+      {spec && (
         <ApprovalGate
-          approveLabel={`Approve v${latest.v} & send to playtest`}
+          approveLabel="Approve patch & send to Testing"
           approval={issue.approvals.spec}
-          note={viewingOld && <p className="text-sm text-muted">You’re viewing v{shown.v}. Approval applies to the latest version, v{latest.v}.</p>}
-          disabled={running || !inSpec || issue.status === 'error'}
-          disabledReason={running ? 'Wait for the Spec Writer to finish.' : issue.status === 'error' ? 'Resolve the agent error first.' : null}
-          onApprove={(comment) => { dispatch({ type: 'SPEC_APPROVE', id: issue.id, comment }); navigate(`/issues/${issue.id}/playtest`) }}
+          note={viewingOld && <p className="text-sm text-muted">You’re viewing v{shown.v}. Return to v{latest.v} to approve its simulation patch.</p>}
+          disabled={!canTest}
+          disabledReason={running ? 'Wait for the Spec Writer to finish.' : issue.status === 'error' ? 'Resolve the agent error first.' : viewingOld ? 'Return to the latest spec version before testing.' : editing ? 'Save or cancel the spec edit first.' : !validation.valid || simulation.error || simulation.loading ? 'Load the simulator and complete a valid numeric patch above.' : null}
+          onApprove={(comment) => {
+            if (!canTest) return
+            dispatch({ type: 'SPEC_APPROVE', id: issue.id, comment, plan, config: simulation.config })
+            navigate(`/issues/${issue.id}/playtest`)
+          }}
           onRequestChanges={(comment) => dispatch({ type: 'SPEC_CHAT', id: issue.id, text: comment })}
           onReject={(comment) => dispatch({ type: 'SPEC_REJECT', id: issue.id, comment })}
           rejectLabel="Reject spec"

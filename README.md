@@ -26,7 +26,11 @@ See [`.env.example`](.env.example) and [`backend/.env.example`](backend/.env.exa
 cd mockreddit && npm install && npm run dev  # http://localhost:5174
 cd mockr && npm install && npm run dev       # http://localhost:5175
 cd backend && npm install && npm run dev     # http://127.0.0.1:3001
+cd tft-clone && npm install && npm run dev:api # http://127.0.0.1:3002
+cd ui && npm install && npm run dev          # http://localhost:5173
 ```
+
+The UI's Development → Testing transition calls the Hexlab API directly through its Vite proxy. See [ui/README.md](ui/README.md) for the numeric patch contract, measured results, and demo walkthrough. This simulation path can run independently of the main backend and Supabase; its review history currently persists in the browser.
 
 The backend loads the repository-root `.env` and binds to loopback. It uses the database URL only on the server. Starting a run also requires `BASELINE_REVISION` and exactly three `SCENARIO_MANIFEST` entries; the external baseline runner is not implemented yet, so the current backend cannot complete a run.
 
@@ -41,3 +45,10 @@ The backend loads the repository-root `.env` and binds to loopback. It uses the 
 - `POST /runs/:id/decision` — revision-bound human accept/reject
 
 Source RPC contract examples are in [`docs/contracts/source-rpc-examples.md`](docs/contracts/source-rpc-examples.md). Browser anon permissions allow intended source RPCs but do not allow direct workflow-state writes.
+
+
+
+
+FOR AGENTS:
+
+Mobile accesability does not matter. This is a dev tool for desktop.

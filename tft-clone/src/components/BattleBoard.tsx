@@ -4,14 +4,14 @@ import { simulateBattle } from '../engine/combat';
 import type { BattleResult, BattleUnit, GameConfig, UnitSetup } from '../engine/types';
 import { EquipmentIcon } from './EquipmentIcon';
 import { Portrait } from './Portrait';
+import { frameAt, startingUnits } from '../replay/frame';
 interface Props {config:GameConfig;teamA:UnitSetup[];teamB:UnitSetup[];seed:number;mode:'pvp'|'pve';selectedUnit:string|null;onSelect:(id:string)=>void;onPlace:(x:number,y:number)=>void}
-function startingUnits(result:BattleResult|null) { const start=result?.events.find(e=>e.type==='start');return start?.type==='start'?structuredClone(start.units):[]; }
 export function BattleBoard({config,teamA,teamB,seed,mode,selectedUnit,onSelect,onPlace}:Props) {
   const [result,setResult]=useState<BattleResult|null>(null),[playing,setPlaying]=useState(false),[time,setTime]=useState(0),[speed,setSpeed]=useState(1),[error,setError]=useState(''),[focusedTile,setFocusedTile]=useState(12);
   useEffect(()=>{setResult(null);setPlaying(false);setTime(0)},[config,teamA,teamB,mode,seed]);
   useEffect(()=>{if(!playing||!result)return;let last=performance.now();const handle=window.setInterval(()=>{const now=performance.now();const elapsed=(now-last)/1000*speed;last=now;setTime(t=>{const next=Math.min(result.duration,t+elapsed);if(next>=result.duration)setPlaying(false);return next})},32);return()=>clearInterval(handle)},[playing,result,speed]);
   const preview=useMemo(()=>{if(result)return startingUnits(result);return [...teamA.map(u=>({...u,team:'A' as const})),...teamB.map(u=>({...u,team:'B' as const}))].map(u=>{const stats=config.champions[u.championId]??config.monsters[u.championId];return {...stats,...u,maxHp:stats.hp,hp:stats.hp,alive:true,damageDealt:0,damageTaken:0,kills:0,survivalDuration:0} as BattleUnit})},[result,teamA,teamB,config]);
-  const {units,attacks}=useMemo(()=>{const units=structuredClone(preview);const attacks:Array<{from:BattleUnit;to:BattleUnit;damage:number}>=[];if(result)for(const event of result.events){if(event.time>time)break;if(event.type==='move'){const u=units.find(u=>u.id===event.unitId);if(u)u.position={...event.to}}if(event.type==='attack'){const from=units.find(u=>u.id===event.unitId),to=units.find(u=>u.id===event.targetId);if(to)to.hp=event.targetHp;if(from&&to&&time-event.time<0.2)attacks.push({from:structuredClone(from),to:structuredClone(to),damage:event.damage})}if(event.type==='death'){const u=units.find(u=>u.id===event.unitId);if(u){u.alive=false;u.hp=0}}}return {units,attacks}},[preview,result,time]);
+  const {units,attacks}=useMemo(()=>frameAt(preview,result,time),[preview,result,time]);
   const finished=!!result&&time>=result.duration;
   function battle(){try{setError('');const outcome=simulateBattle(teamA,teamB,config,seed);setResult(outcome);setTime(0);setPlaying(true)}catch(e){setError(e instanceof Error?e.message:'Unable to simulate this battle.')}}
   const replay=()=>{setTime(0);setPlaying(true)};

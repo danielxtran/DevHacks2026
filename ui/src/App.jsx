@@ -22,7 +22,7 @@ function NavItem({ to, end, children }) {
         `group relative flex h-full items-center text-xs font-bold uppercase tracking-[0.1em] ${isActive ? 'text-text after:absolute after:inset-x-1 after:bottom-0 after:h-1 after:rounded-t-sm after:bg-accent' : 'text-muted hover:text-text'}`
       }
     >
-      {({ isActive }) => <span className={`sel px-3 py-2 ${isActive ? 'is-selected' : ''}`}>{children}</span>}
+      {({ isActive }) => <span className={`sel px-2 py-2 sm:px-3 ${isActive ? 'is-selected' : ''}`}>{children}</span>}
     </NavLink>
   )
 }
@@ -71,17 +71,17 @@ function TopBar() {
   const running = state.issues.filter((i) => i.run).length
   return (
     <header className="border-b border-border">
-      <div className="mx-auto flex h-[72px] max-w-6xl items-center gap-10 px-6">
+      <div className="mx-auto flex h-[72px] max-w-6xl items-center gap-3 px-4 sm:gap-10 sm:px-6">
         <Link to="/" aria-label="Riot Games, home" className="text-text">
-          <RiotLogo className="h-7 w-auto" />
+          <RiotLogo className="h-6 w-auto sm:h-7" />
         </Link>
-        <nav aria-label="Main" className="flex h-full items-center gap-2">
+        <nav aria-label="Main" className="flex h-full items-center gap-1 sm:gap-2">
           <NavItem to="/" end>Board</NavItem>
           <NavItem to="/list">List</NavItem>
         </nav>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
           {running > 0 && (
-            <span className="flex items-center gap-2 text-xs text-muted" role="status">
+            <span className="hidden items-center gap-2 text-xs text-muted sm:flex" role="status">
               <span aria-hidden className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-info" />
               {running} agent{running === 1 ? '' : 's'} working
             </span>

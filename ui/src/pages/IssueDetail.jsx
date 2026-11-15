@@ -11,6 +11,12 @@ import { stamp, timeAgo } from '../components/format'
 
 function StatSanityCheck({ issue }) {
   const s = issue.stat
+  if (s.simulationOnly) return (
+    <div>
+      <h2 className="text-sm text-muted">Simulation evidence</h2>
+      <p className="mt-2 text-sm">{s.note}</p>
+    </div>
+  )
   const t = issue.change.metric.target
   const outside = s.value < t[0] || s.value > t[1]
   return (

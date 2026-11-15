@@ -116,6 +116,6 @@ export const SOURCES = {
   x: { label: 'X', glyph: 'X' },
 }
 
-export const GAMES = ['Shardfall', 'Tidebreak']
+export const GAMES = ['Shardfall', 'Tidebreak', 'Hexlab']
 
 export const ME = 'You'

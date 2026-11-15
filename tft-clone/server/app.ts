@@ -29,7 +29,7 @@ export function createApp(options:{config?:GameConfig;evaluator?:Evaluator}={}){
  const config=validateConfig(options.config??baseConfig);
  const evaluate=options.evaluator??compareBalance;
  const app=express();
- const origins=(process.env.CORS_ORIGINS??'http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173').split(',').map(origin=>origin.trim()).filter(Boolean);
+ const origins=(process.env.CORS_ORIGINS??'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5176,http://127.0.0.1:5176,http://localhost:4176,http://127.0.0.1:4176').split(',').map(origin=>origin.trim()).filter(Boolean);
  app.use(cors({origin:(origin,cb)=>cb(null,!origin||origins.includes(origin))}));
  app.use(express.json({limit:'64kb',strict:true}));
  app.get('/api/health',(_req,res)=>res.json({status:'ok',service:'mini-tft-balance-lab',baselineConfigId:configIdentifier(config)}));

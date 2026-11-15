@@ -2,7 +2,7 @@
 // Agent 2 (spec), Agent 3 (build) and the playtest bots. Here they derive
 // realistic, internally consistent artifacts from each issue's change descriptor.
 
-import { tagInfo } from './constants'
+import { tagInfo } from './constants.js'
 
 // ---------- small utils ----------
 function hash(str) {
@@ -57,7 +57,10 @@ export function makeSpec(issue, overrides = {}) {
         `Hand off to playtest bots: 2,000 matches on the old build vs. the new build`,
       ]
 
-  return {
+  const spec = {
+    ...(c.simulation ? { simulation: { ...structuredClone(c.simulation), changes: c.simulation.changes.map(change =>
+      change.type === c.simulationTarget?.type && change.id === c.simulationTarget?.id && change.stat === c.key
+        ? { ...change, value: after } : { ...change }) } } : {}),
     title: issue.title,
     problem: c.problem,
     change: `${direction} ${c.label} from ${fmt(c.before, c.unit)} to ${fmt(after, c.unit)}. ${c.rationale}`,
@@ -75,6 +78,12 @@ export function makeSpec(issue, overrides = {}) {
       `Success = ${c.metric.name.toLowerCase()} within ${c.metric.target[0]}–${c.metric.target[1]}${c.metric.unit}`,
     ],
   }
+  if (c.simulation) {
+    spec.plan = ['Apply the numeric patch to a copy of the Hexlab baseline.', 'Run identical seeded matchups before and after the patch.', 'Review measured effects in Testing before deciding whether to keep the change.']
+    spec.metrics = ['Measure champion and composition win rates, damage, and survival.', 'Review sample counts and descriptive confidence intervals; no improvement is assumed.']
+    spec.summary = [`${direction} ${c.label}: ${fmt(c.before, c.unit)} → ${fmt(after, c.unit)}`, 'Compare the same seeded matchups in Hexlab.', 'Review measured performance before making a human decision.']
+  }
+  return spec
 }
 
 export function specToText(spec) {
@@ -146,6 +155,12 @@ export function reviseSpec(issue, spec, message) {
   }
 
   const next = makeSpec(issue, { after, systems, phased, risks })
+  if (spec.simulation) {
+    next.simulation = structuredClone(spec.simulation)
+    if (after !== cur && c.simulationTarget) next.simulation.changes = next.simulation.changes.map(change =>
+      change.type === c.simulationTarget.type && change.id === c.simulationTarget.id && change.stat === c.key
+        ? { ...change, value: after } : change)
+  }
   return { spec: next, reply: `Rewrote the spec: ${did.join('; ')}.` }
 }
 
